@@ -16,7 +16,7 @@ async function readCurrentData() {
 
     // get() with access: 'private' works for private stores.
     // Change to 'public' if your store is Public access.
-    const result = await get(targetBlob.url, { access: 'private' });
+    const result = await get(targetBlob.url, { access: 'public' });
     if (!result || !result.stream) return {};
 
     const text = await new Response(result.stream).text();
@@ -86,7 +86,7 @@ export default async function handler(req, res) {
       //    allowOverwrite: true is REQUIRED — without it, every
       //    save after the first one fails because the file exists.
       const blob = await put(FILE_NAME, JSON.stringify(currentData), {
-        access: 'private',
+        access: 'public',
         contentType: 'application/json',
         addRandomSuffix: false,
         allowOverwrite: true,
