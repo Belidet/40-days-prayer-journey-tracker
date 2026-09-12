@@ -1,4 +1,6 @@
-// Pilgrim Configuration & Authentication
+// ==========================================
+// 1. CONFIGURATION
+// ==========================================
 const USERS = ['Belidet', 'Ephi', 'Seli', 'Ermi'];
 const PASSWORDS = {
   Belidet: 'belidet123',
@@ -12,63 +14,45 @@ const TOTAL_DAYS = 40;
 
 let loggedInUser = localStorage.getItem('orthodox_journey_user') || null;
 let selectedDateStr = START_DATE_STR;
+let cloudData = {};
 
-// Database state stored in local browser storage
-let db = JSON.parse(localStorage.getItem('orthodox_journey_db')) || {};
-
-// Initialize data structure for 40 days
-function initDataStore() {
-  const startDate = new Date(START_DATE_STR);
-  for (let i = 0; i < TOTAL_DAYS; i++) {
-    const d = new Date(startDate);
-    d.setDate(d.getDate() + i);
-    const dateKey = d.toISOString().split('T')[0];
-    
-    if (!db[dateKey]) {
-      db[dateKey] = {};
+// Fetch latest data from Vercel KV via API
+async function loadCloudData() {
+  try {
+    const response = await fetch('/api/prayer');
+    if (response.ok) {
+      cloudData = await response.json();
+      renderDashboard();
+      renderMatrix();
     }
-    
-    USERS.forEach(u => {
-      if (!db[dateKey][u]) {
-        db[dateKey][u] = { jesus: false, theotokos: false, note: '' };
-      }
-    });
+  } catch (err) {
+    console.error('Failed to connect to Vercel Storage:', err);
   }
-  saveDb();
 }
 
-function saveDb() {
-  localStorage.setItem('orthodox_journey_db', JSON.stringify(db));
-}
+// Start auto-polling every 5 seconds so changes on one device show on all
+setInterval(loadCloudData, 5000);
 
-// Web Audio API Synthesized Bell Chime
+// Sound & Visual FX
 function playGentleChime() {
   try {
     const AudioCtx = window.AudioContext || window.webkitAudioContext;
     if (!AudioCtx) return;
     const ctx = new AudioCtx();
-
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
-
     osc.type = 'sine';
-    osc.frequency.setValueAtTime(523.25, ctx.currentTime); // C5 note
+    osc.frequency.setValueAtTime(523.25, ctx.currentTime);
     osc.frequency.exponentialRampToValueAtTime(261.63, ctx.currentTime + 2.0);
-
     gain.gain.setValueAtTime(0.25, ctx.currentTime);
     gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 2.0);
-
     osc.connect(gain);
     gain.connect(ctx.destination);
-
     osc.start();
     osc.stop(ctx.currentTime + 2.0);
-  } catch (e) {
-    // Audio context fallback
-  }
+  } catch (e) {}
 }
 
-// Incense Particle Visual FX
 function triggerGoldenIncense() {
   const canvas = document.createElement('canvas');
   canvas.style.position = 'fixed';
@@ -99,7 +83,6 @@ function triggerGoldenIncense() {
       p.y -= p.speedY;
       p.x += p.speedX;
       p.opacity -= 0.009;
-
       ctx.fillStyle = `rgba(255, 215, 0, ${Math.max(0, p.opacity)})`;
       ctx.shadowBlur = 6;
       ctx.shadowColor = '#ffd700';
@@ -117,7 +100,7 @@ function triggerGoldenIncense() {
   animate();
 }
 
-// User Authentication
+// Authentication
 function loginUser() {
   const user = document.getElementById('userSelect').value;
   const pass = document.getElementById('passInput').value;
@@ -187,58 +170,85 @@ function updateDateLabel() {
   const start = new Date(START_DATE_STR);
   const cur = new Date(selectedDateStr);
   const diffDays = Math.round((cur - start) / (1000 * 60 * 60 * 24)) + 1;
-  
   const options = { month: 'long', day: 'numeric', year: 'numeric' };
   const dateFormatted = cur.toLocaleDateString('en-US', options);
 
   document.getElementById('dateDisplayLabel').textContent = `Day ${diffDays} of 40 — ${dateFormatted}`;
 }
 
-// Prayer Status Toggles
-function togglePrayer(user, prayerType) {
+// Save Progress to Vercel KV
+async function togglePrayer(user, prayerType) {
   if (loggedInUser !== user) {
     alert(`Please log in as ${user} to update prayer records.`);
     return;
   }
 
-  const dayRecord = db[selectedDateStr][user];
-  dayRecord[prayerType] = !dayRecord[prayerType];
+  const dayData = cloudData[selectedDateStr] || {};
+  const userData = dayData[user] || { jesus: false, theotokos: false, note: '' };
   
-  saveDb();
-  
-  if (dayRecord[prayerType]) {
+  const newStatus = !userData[prayerType];
+  userData[prayerType] = newStatus;
+
+  // Optimistic UI render
+  if (!cloudData[selectedDateStr]) cloudData[selectedDateStr] = {};
+  cloudData[selectedDateStr][user] = userData;
+  renderDashboard();
+  renderMatrix();
+
+  if (newStatus) {
     playGentleChime();
-    if (dayRecord.jesus && dayRecord.theotokos) {
+    if (userData.jesus && userData.theotokos) {
       triggerGoldenIncense();
     }
   }
 
-  renderDashboard();
-  renderMatrix();
+  // Persist to Vercel KV Storage
+  await fetch('/api/prayer', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      dateKey: selectedDateStr,
+      userData: { [user]: userData }
+    })
+  });
 }
 
-function saveNote(user, noteText) {
+async function saveNote(user, noteText) {
   if (loggedInUser !== user) return;
-  db[selectedDateStr][user].note = noteText;
-  saveDb();
+
+  const dayData = cloudData[selectedDateStr] || {};
+  const userData = dayData[user] || { jesus: false, theotokos: false, note: '' };
+  userData.note = noteText;
+
+  if (!cloudData[selectedDateStr]) cloudData[selectedDateStr] = {};
+  cloudData[selectedDateStr][user] = userData;
+
+  await fetch('/api/prayer', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      dateKey: selectedDateStr,
+      userData: { [user]: userData }
+    })
+  });
 }
 
 function get40DayCompletionCount(user) {
   let count = 0;
-  Object.keys(db).forEach(date => {
-    if (db[date][user] && db[date][user].jesus && db[date][user].theotokos) {
+  Object.keys(cloudData).forEach(date => {
+    if (cloudData[date] && cloudData[date][user] && cloudData[date][user].jesus && cloudData[date][user].theotokos) {
       count++;
     }
   });
   return count;
 }
 
-// Component Rendering
+// Render UI
 function renderDashboard() {
   const container = document.getElementById('pilgrimsDashboard');
   container.innerHTML = '';
 
-  const dayData = db[selectedDateStr] || {};
+  const dayData = cloudData[selectedDateStr] || {};
 
   USERS.forEach(user => {
     const data = dayData[user] || { jesus: false, theotokos: false, note: '' };
@@ -274,7 +284,7 @@ function renderDashboard() {
           ${data.jesus ? '✓ Prayer Completed' : 'Mark as Done'}
         </button>
         <div class="beads-container">
-          ${Array(5).fill(0).map((_, i) => `<div class="bead ${data.jesus ? 'filled' : ''}"></div>`).join('')}
+          ${Array(5).fill(0).map(() => `<div class="bead ${data.jesus ? 'filled' : ''}"></div>`).join('')}
         </div>
       </div>
 
@@ -287,7 +297,7 @@ function renderDashboard() {
           ${data.theotokos ? '✓ Prayer Completed' : 'Mark as Done'}
         </button>
         <div class="beads-container">
-          ${Array(5).fill(0).map((_, i) => `<div class="bead ${data.theotokos ? 'filled' : ''}"></div>`).join('')}
+          ${Array(5).fill(0).map(() => `<div class="bead ${data.theotokos ? 'filled' : ''}"></div>`).join('')}
         </div>
       </div>
 
@@ -325,10 +335,10 @@ function renderMatrix() {
       <td style="font-size:0.8rem;">${d.getMonth() + 1}/${d.getDate()}</td>`;
 
     USERS.forEach(u => {
-      const rec = db[dateStr] ? db[dateStr][u] : { jesus: false, theotokos: false };
+      const rec = cloudData[dateStr] ? cloudData[dateStr][u] : { jesus: false, theotokos: false };
       let statusClass = '';
-      if (rec.jesus && rec.theotokos) statusClass = 'completed';
-      else if (rec.jesus || rec.theotokos) statusClass = 'partial';
+      if (rec && rec.jesus && rec.theotokos) statusClass = 'completed';
+      else if (rec && (rec.jesus || rec.theotokos)) statusClass = 'partial';
 
       rowHtml += `<td><span class="matrix-status-dot ${statusClass}"></span></td>`;
     });
@@ -339,8 +349,6 @@ function renderMatrix() {
 }
 
 // Initial Bootstrapping
-initDataStore();
+loadCloudData();
 updateAuthUI();
 updateDateLabel();
-renderDashboard();
-renderMatrix();
