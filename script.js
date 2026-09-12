@@ -11,29 +11,43 @@ const PASSWORDS = {
 
 const START_DATE_STR = '2026-09-11';
 const TOTAL_DAYS = 40;
+const POLL_INTERVAL_MS = 10000;   // 10s — was 5s; kinder to server, still feels instant
 
 let loggedInUser = localStorage.getItem('orthodox_journey_user') || null;
 let selectedDateStr = START_DATE_STR;
 let cloudData = {};
 
-// Fetch latest data from Vercel KV via API
+// Guard flag: prevents background polling from overwriting an in-flight save
+let isSaving = false;
+
+// ==========================================
+// 2. CLOUD SYNC
+// ==========================================
 async function loadCloudData() {
+  // Skip polling refresh while a save is in-flight to avoid
+  // overwriting the user's pending change with stale server data
+  if (isSaving) return;
+
   try {
-    const response = await fetch('/api/prayer');
-    if (response.ok) {
-      cloudData = await response.json();
-      renderDashboard();
-      renderMatrix();
+    const response = await fetch('/api/prayer', { cache: 'no-store' });
+    if (!response.ok) {
+      console.warn('GET /api/prayer returned', response.status);
+      return;
     }
+    cloudData = await response.json();
+    renderDashboard();
+    renderMatrix();
   } catch (err) {
     console.error('Failed to connect to Vercel Storage:', err);
   }
 }
 
-// Start auto-polling every 5 seconds so changes on one device show on all
-setInterval(loadCloudData, 5000);
+// Start auto-polling so changes on one device show on all
+setInterval(loadCloudData, POLL_INTERVAL_MS);
 
-// Sound & Visual FX
+// ==========================================
+// 3. SOUND & VISUAL FX
+// ==========================================
 function playGentleChime() {
   try {
     const AudioCtx = window.AudioContext || window.webkitAudioContext;
@@ -100,7 +114,9 @@ function triggerGoldenIncense() {
   animate();
 }
 
-// Authentication
+// ==========================================
+// 4. AUTHENTICATION
+// ==========================================
 function loginUser() {
   const user = document.getElementById('userSelect').value;
   const pass = document.getElementById('passInput').value;
@@ -141,11 +157,13 @@ function updateAuthUI() {
   }
 }
 
-// Date Navigation
+// ==========================================
+// 5. DATE NAVIGATION
+// ==========================================
 function changeDate(deltaDays) {
   const cur = new Date(selectedDateStr);
   cur.setDate(cur.getDate() + deltaDays);
-  
+
   const start = new Date(START_DATE_STR);
   const end = new Date(START_DATE_STR);
   end.setDate(end.getDate() + TOTAL_DAYS - 1);
@@ -176,7 +194,9 @@ function updateDateLabel() {
   document.getElementById('dateDisplayLabel').textContent = `Day ${diffDays} of 40 — ${dateFormatted}`;
 }
 
-// Save Progress to Vercel KV
+// ==========================================
+// 6. SAVE PRAYER PROGRESS
+// ==========================================
 async function togglePrayer(user, prayerType) {
   if (loggedInUser !== user) {
     alert(`Please log in as ${user} to update prayer records.`);
@@ -185,11 +205,11 @@ async function togglePrayer(user, prayerType) {
 
   const dayData = cloudData[selectedDateStr] || {};
   const userData = dayData[user] || { jesus: false, theotokos: false, note: '' };
-  
+
   const newStatus = !userData[prayerType];
   userData[prayerType] = newStatus;
 
-  // Optimistic UI render
+  // Optimistic UI update — show change immediately
   if (!cloudData[selectedDateStr]) cloudData[selectedDateStr] = {};
   cloudData[selectedDateStr][user] = userData;
   renderDashboard();
@@ -202,15 +222,41 @@ async function togglePrayer(user, prayerType) {
     }
   }
 
-  // Persist to Vercel KV Storage
-  await fetch('/api/prayer', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      dateKey: selectedDateStr,
-      userData: { [user]: userData }
-    })
-  });
+  // Block polling while save is in-flight so the refresh doesn't
+  // overwrite the change we just made locally
+  isSaving = true;
+  try {
+    const res = await fetch('/api/prayer', {
+      method: 'POST',
+      cache: 'no-store',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        dateKey: selectedDateStr,
+        userData: { [user]: userData }
+      })
+    });
+
+    if (!res.ok) {
+      const errBody = await res.text();
+      console.error('Save failed:', res.status, errBody);
+      alert('Could not save to server. Please check your connection.');
+      // Revert optimistic UI by pulling fresh data
+      await loadCloudData();
+    } else {
+      // Sync from server response so all devices see the same state
+      const payload = await res.json();
+      if (payload && payload.data) {
+        cloudData = payload.data;
+        renderDashboard();
+        renderMatrix();
+      }
+    }
+  } catch (err) {
+    console.error('Network error:', err);
+    alert('Network error — change not saved.');
+  } finally {
+    isSaving = false;
+  }
 }
 
 async function saveNote(user, noteText) {
@@ -223,27 +269,49 @@ async function saveNote(user, noteText) {
   if (!cloudData[selectedDateStr]) cloudData[selectedDateStr] = {};
   cloudData[selectedDateStr][user] = userData;
 
-  await fetch('/api/prayer', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      dateKey: selectedDateStr,
-      userData: { [user]: userData }
-    })
-  });
+  isSaving = true;
+  try {
+    const res = await fetch('/api/prayer', {
+      method: 'POST',
+      cache: 'no-store',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        dateKey: selectedDateStr,
+        userData: { [user]: userData }
+      })
+    });
+
+    if (!res.ok) {
+      console.error('Note save failed:', res.status, await res.text());
+    }
+  } catch (err) {
+    console.error('Note network error:', err);
+  } finally {
+    isSaving = false;
+  }
 }
 
+// ==========================================
+// 7. COMPLETION COUNTER
+// ==========================================
 function get40DayCompletionCount(user) {
   let count = 0;
   Object.keys(cloudData).forEach(date => {
-    if (cloudData[date] && cloudData[date][user] && cloudData[date][user].jesus && cloudData[date][user].theotokos) {
+    if (
+      cloudData[date] &&
+      cloudData[date][user] &&
+      cloudData[date][user].jesus &&
+      cloudData[date][user].theotokos
+    ) {
       count++;
     }
   });
   return count;
 }
 
-// Render UI
+// ==========================================
+// 8. RENDER — DASHBOARD
+// ==========================================
 function renderDashboard() {
   const container = document.getElementById('pilgrimsDashboard');
   container.innerHTML = '';
@@ -313,6 +381,9 @@ function renderDashboard() {
   });
 }
 
+// ==========================================
+// 9. RENDER — 40-DAY MATRIX
+// ==========================================
 function renderMatrix() {
   const table = document.getElementById('journeyMatrixTable');
   table.innerHTML = '';
@@ -348,7 +419,9 @@ function renderMatrix() {
   }
 }
 
-// Initial Bootstrapping
+// ==========================================
+// 10. BOOTSTRAP
+// ==========================================
 loadCloudData();
 updateAuthUI();
 updateDateLabel();
