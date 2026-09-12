@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>40-Day Orthodox Prayer Journey</title>
+  
+  <!-- Favicon & Stylesheet -->
+  <link rel="stylesheet" href="style.css">
+  
+  <!-- Font preconnections for optimal performance on Vercel Edge CDN -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=EB+Garamond:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+</head>
+<body>
+
+  <div class="ambient-glow" aria-hidden="true"></div>
+
+  <div class="container">
+
+    <!-- TOP HEADER -->
+    <header>
+      <div class="orthodox-cross" aria-hidden="true">☦</div>
+      <h1 class="gold-text">40-DAY PRAYER JOURNEY</h1>
+      <div class="subtitle">September 11, 2026 — October 20, 2026</div>
+      <div class="scripture">"Pray without ceasing." — 1 Thessalonians 5:17</div>
+    </header>
+
+    <!-- USER AUTHENTICATION BAR -->
+    <section class="user-bar gold-border-frame" aria-label="User Authentication">
+      <div class="user-welcome">
+        <span>Current Pilgrim:</span> <strong id="currentUserName">Guest (View Only)</strong>
+      </div>
+      <div class="auth-controls">
+        <select id="userSelect" aria-label="Select Pilgrim">
+          <option value="">Select Pilgrim...</option>
+          <option value="Belidet">Belidet</option>
+          <option value="Ephi">Ephi</option>
+          <option value="Seli">Seli</option>
+          <option value="Ermi">Ermi</option>
+        </select>
+        <input type="password" id="passInput" placeholder="Password" aria-label="Password">
+        <button type="button" onclick="loginUser()">Log In</button>
+        <button type="button" onclick="logoutUser()" class="sub-btn" id="logoutBtn" style="display:none;">Log Out</button>
+      </div>
+    </section>
+
+    <!-- SACRED ICONS BANNER -->
+    <section class="icons-banner" aria-label="Sacred Orthodox Icons">
+      <!-- Christ Pantocrator -->
+      <article class="icon-card gold-border-frame">
+        <div class="icon-img-wrapper">
+          <svg class="icon-svg-fallback" viewBox="0 0 160 200" aria-hidden="true">
+            <rect width="160" height="200" fill="#201309"/>
+            <circle cx="80" cy="75" r="50" fill="#b8860b" opacity="0.4"/>
+            <path d="M 80,25 L 80,125 M 30,75 L 130,75" stroke="#ffd700" stroke-width="6" opacity="0.6"/>
+            <circle cx="80" cy="70" r="30" fill="#4a2e1b"/>
+            <path d="M 60,110 Q 80,130 100,110 Q 90,160 70,160 Z" fill="#800020"/>
+            <path d="M 50,140 Q 80,170 110,140" fill="none" stroke="#d4af37" stroke-width="4"/>
+            <text x="80" y="30" fill="#ffd700" font-size="14" text-anchor="middle" font-family="serif">IC XC</text>
+          </svg>
+          <img src="christ-pantocrator.jpg" 
+               alt="Icon of Lord Jesus Christ Pantocrator" 
+               loading="lazy"
+               onerror="if(this.src!='https://upload.wikimedia.org/wikipedia/commons/4/43/Spas_vsederzhitel_sinay.jpg'){this.src='https://upload.wikimedia.org/wikipedia/commons/4/43/Spas_vsederzhitel_sinay.jpg';}">
+        </div>
+        <div class="icon-caption">Lord Jesus Christ Son of God have mercy on me a sinner.</div>
+      </article>
+
+      <!-- Theotokos Vladimir -->
+      <article class="icon-card gold-border-frame">
+        <div class="icon-img-wrapper">
+          <svg class="icon-svg-fallback" viewBox="0 0 160 200" aria-hidden="true">
+            <rect width="160" height="200" fill="#201309"/>
+            <circle cx="70" cy="70" r="45" fill="#b8860b" opacity="0.4"/>
+            <circle cx="100" cy="85" r="25" fill="#b8860b" opacity="0.4"/>
+            <path d="M 45,65 Q 70,120 95,180 H 30 Z" fill="#400511"/>
+            <circle cx="70" cy="65" r="25" fill="#4a2e1b"/>
+            <circle cx="95" cy="80" r="16" fill="#5c3a21"/>
+            <text x="80" y="30" fill="#ffd700" font-size="14" text-anchor="middle" font-family="serif">MP OY</text>
+          </svg>
+          <img src="theotokos-vladimir.jpg" 
+               alt="Icon of the Most Holy Theotokos of Vladimir" 
+               loading="lazy"
+               onerror="if(this.src!='https://upload.wikimedia.org/wikipedia/commons/0/00/Vladimir_Theotokos.jpg'){this.src='https://upload.wikimedia.org/wikipedia/commons/0/00/Vladimir_Theotokos.jpg';}">
+        </div>
+        <div class="icon-caption">Most Holy Theotokos save me!</div>
+      </article>
+    </section>
+
+    <!-- SPIRITUAL PROLOGUE -->
+    <section class="prologue-card gold-border-frame">
+      <h3>The Sacred 40-Day Rule</h3>
+      <p>
+        In Holy Orthodox Tradition, 40 days represents a sacred period of purification, spiritual transformation, and unwavering prayer. From Moses on Mount Sinai and Elijah's journey to Horeb, to our Lord Jesus Christ's 40-day fast in the wilderness, this period forms a spiritual ladder. Together, Belidet, Ephi, Seli, and Ermi embark on this 40-day rule from <strong>September 11, 2026</strong> to <strong>October 20, 2026</strong>, acquiring peace of heart through unceasing prayer.
+      </p>
+    </section>
+
+    <!-- DATE SELECTION CONTROLLER -->
+    <section class="date-selector gold-border-frame" aria-label="Date Navigation">
+      <div class="date-display" id="dateDisplayLabel">Day 1 — September 11, 2026</div>
+      <div class="date-nav">
+        <button type="button" onclick="changeDate(-1)" aria-label="Previous Day">&#9664; Prev Day</button>
+        <input type="date" id="journeyDatePicker" min="2026-09-11" max="2026-10-20" value="2026-09-11" onchange="onDatePicked(this.value)" aria-label="Select Date">
+        <button type="button" onclick="changeDate(1)" aria-label="Next Day">Next Day &#9654;</button>
+      </div>
+    </section>
+
+    <!-- PILGRIMS DASHBOARD GRID -->
+    <main class="dashboard" id="pilgrimsDashboard" aria-label="Pilgrim Prayer Dashboard">
+      <!-- Generated via script.js -->
+    </main>
+
+    <!-- 40-DAY OVERVIEW MATRIX TABLE -->
+    <section class="matrix-card gold-border-frame" aria-label="40-Day Progress Matrix">
+      <h3>40-Day Journey Matrix</h3>
+      <div style="overflow-x: auto;">
+        <table class="matrix-table" id="journeyMatrixTable">
+          <!-- Generated via script.js -->
+        </table>
+      </div>
+    </section>
+
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
