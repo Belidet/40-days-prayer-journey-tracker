@@ -20,7 +20,7 @@ const dailyWisdomArray = [
   /* Day 1 */  '"Acquire a peaceful spirit, and thousands around you will be saved." — Abba Seraphim of Sarov',
   /* Day 2 */  '"Go, sit in your cell, and your cell will teach you everything." — Abba Moses the Black',
   /* Day 3 */  '"Pray without ceasing." — 1 Thessalonians 5:17',
-  /* Day 4 */  '"If a man does not say in his heart, \'Only I and God exist in this world,\' he will not find peace." — Abba Alois',
+  /* Day 4 */  '"This is the great work of a man: always to take the blame for his own sins before God and to expect temptation to his last breath." — Saint Anthony the Great',
   /* Day 5 */  '"Be angry and do not sin; do not let the sun go down on your wrath." — Ephesians 4:26',
   /* Day 6 */  '"A tree cannot bear fruit if it is frequently transplanted; so it is with the monk." — Abba Anthony the Great',
   /* Day 7 */  '"Blessed are the pure in heart, for they shall see God." — Matthew 5:8',
@@ -84,6 +84,7 @@ function formatDateStr(dateObj) {
 function escapeHTML(str) {
   if (!str) return '';
   return str
+    .replace(/[\u00A0\u1680\u180E\u2000-\u200B\u202F\u205F\u3000\uFEFF]/g, ' ')
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
