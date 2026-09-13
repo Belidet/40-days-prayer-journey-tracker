@@ -18,7 +18,7 @@
   <link rel="apple-touch-icon" href="icon-192.png">
   <link rel="stylesheet" href="style.css">
   
-  <!-- Font preconnections for optimal performance on Vercel Edge CDN -->
+  <!-- Font preconnections for optimal performance -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=EB+Garamond:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
@@ -51,10 +51,10 @@
           <option value="Ermi">Ermi</option>
         </select>
 
-        <!-- Updated Password Input Wrapper -->
-        <div class="password-wrapper" style="position: relative; display: inline-flex; align-items: center;">
-          <input type="password" id="passInput" placeholder="Password" aria-label="Password" style="padding-right: 32px;">
-          <button type="button" id="togglePassBtn" onclick="togglePasswordVisibility()" aria-label="Toggle password visibility" style="position: absolute; right: 6px; background: transparent; border: none; cursor: pointer; color: var(--gold-bright, #ffd700); padding: 2px 6px;">
+        <!-- Password Input Wrapper -->
+        <div class="password-wrapper">
+          <input type="password" id="passInput" placeholder="Password" aria-label="Password">
+          <button type="button" id="togglePassBtn" class="pass-toggle-btn" onclick="togglePasswordVisibility()" aria-label="Toggle password visibility">
             👁️
           </button>
         </div>
@@ -80,6 +80,7 @@
           </svg>
           <img src="christ-pantocrator.jpg" 
                alt="Icon of Lord Jesus Christ Pantocrator" 
+               width="220" height="260"
                loading="lazy"
                onerror="if(this.src!='https://upload.wikimedia.org/wikipedia/commons/4/43/Spas_vsederzhitel_sinay.jpg'){this.src='https://upload.wikimedia.org/wikipedia/commons/4/43/Spas_vsederzhitel_sinay.jpg';}">
         </div>
@@ -100,6 +101,7 @@
           </svg>
           <img src="theotokos-vladimir.jpg" 
                alt="Icon of the Most Holy Theotokos of Vladimir" 
+               width="220" height="260"
                loading="lazy"
                onerror="if(this.src!='https://upload.wikimedia.org/wikipedia/commons/0/00/Vladimir_Theotokos.jpg'){this.src='https://upload.wikimedia.org/wikipedia/commons/0/00/Vladimir_Theotokos.jpg';}">
         </div>
@@ -124,8 +126,8 @@
     <!-- PUBLIC WISDOM FROM THE BIBLE & SAINTS SECTION -->
     <section class="wisdom-card gold-border-frame" aria-label="Wisdom from the Bible and Saints">
       <h3>Wisdom from the Bible & the Holy Fathers</h3>
-      <div class="wisdom-scroll-container" style="max-height: 220px; overflow-y: auto; padding-right: 10px;" id="publicWisdomView">
-        <blockquote id="dailyWisdomText" style="margin: 0; font-style: italic; color: #d4af37; line-height: 1.6;">
+      <div class="wisdom-scroll-container" id="publicWisdomView">
+        <blockquote id="dailyWisdomText">
           "Acquire a peaceful spirit, and thousands around you will be saved." — Saint Seraphim of Sarov
         </blockquote>
       </div>
@@ -149,7 +151,7 @@
     <!-- 40-DAY OVERVIEW MATRIX TABLE -->
     <section class="matrix-card gold-border-frame" aria-label="40-Day Progress Matrix">
       <h3>40-Day Journey Matrix</h3>
-      <div style="overflow-x: auto;">
+      <div class="matrix-container">
         <table class="matrix-table" id="journeyMatrixTable">
           <!-- Generated via script.js -->
         </table>
