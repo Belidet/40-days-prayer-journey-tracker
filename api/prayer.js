@@ -1,8 +1,8 @@
 import { createClient } from '@supabase/supabase-js';
 
-// Clean the base URL (strip trailing /rest/v1/ if present)
-const RAW_URL = 'https://cbwfftouxjyfgneieecw.supabase.co/rest/v1/';
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || RAW_URL.replace(/\/rest\/v1\/?$/, '');
+// Base Supabase URL without /rest/v1/ appended
+const RAW_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://cbwfftouxjyfgneieecw.supabase.co';
+const SUPABASE_URL = RAW_URL.replace(/\/rest\/v1\/?$/, '').replace(/\/+$/, '');
 
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || 
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 
@@ -16,19 +16,18 @@ export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
-  // Prevent Edge CDN Caching
+  // Cache Control
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
   res.setHeader('CDN-Cache-Control', 'no-store');
   res.setHeader('Vercel-CDN-Cache-Control', 'no-store');
 
-  // Preflight
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
   }
 
   try {
     // =========================================================
-    // GET — return all stored prayer data mapped by dateKey
+    // GET — Fetch all prayer data
     // =========================================================
     if (req.method === 'GET') {
       const { data, error } = await supabase
@@ -48,7 +47,7 @@ export default async function handler(req, res) {
     }
 
     // =========================================================
-    // POST — merge user data for a specific date and upsert
+    // POST — Save or update prayer data
     // =========================================================
     if (req.method === 'POST') {
       const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
@@ -61,7 +60,7 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: 'Missing or invalid userData in request body.' });
       }
 
-      // 1. Fetch current record for this specific date
+      // Fetch existing record
       const { data: existingRecord } = await supabase
         .from('prayer_progress')
         .select('user_data')
@@ -74,7 +73,7 @@ export default async function handler(req, res) {
         ...userData,
       };
 
-      // 2. Upsert updated data into Supabase
+      // Upsert into database
       const { data, error } = await supabase
         .from('prayer_progress')
         .upsert(
@@ -96,13 +95,13 @@ export default async function handler(req, res) {
     }
 
     // =========================================================
-    // DELETE — reset all prayer journey data
+    // DELETE — Clear data
     // =========================================================
     if (req.method === 'DELETE') {
       const { error } = await supabase
         .from('prayer_progress')
         .delete()
-        .neq('id', 0); // Deletes all rows
+        .neq('id', 0);
 
       if (error) throw error;
 
