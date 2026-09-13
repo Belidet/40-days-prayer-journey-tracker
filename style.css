@@ -134,6 +134,7 @@ input, select, textarea {
   border-radius: 4px;
   font-size: 0.95rem;
   outline: none;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 input:focus, select:focus, textarea:focus {
@@ -160,6 +161,10 @@ button:hover {
   background-color: var(--crimson-hover);
   box-shadow: 0 0 12px rgba(212, 175, 55, 0.5);
   transform: translateY(-1px);
+}
+
+button:active {
+  transform: translateY(0);
 }
 
 button.sub-btn {
@@ -301,23 +306,28 @@ button.sub-btn:hover {
   color: var(--text-main);
 }
 
-/* Custom Gold Scrollbar for Wisdom Container */
-.wisdom-scroll-container::-webkit-scrollbar {
+/* Custom Gold Scrollbar */
+.wisdom-scroll-container::-webkit-scrollbar,
+.matrix-container::-webkit-scrollbar {
   width: 6px;
+  height: 6px;
 }
 
-.wisdom-scroll-container::-webkit-scrollbar-track {
+.wisdom-scroll-container::-webkit-scrollbar-track,
+.matrix-container::-webkit-scrollbar-track {
   background: rgba(0, 0, 0, 0.5);
   border-radius: 3px;
 }
 
-.wisdom-scroll-container::-webkit-scrollbar-thumb {
+.wisdom-scroll-container::-webkit-scrollbar-thumb,
+.matrix-container::-webkit-scrollbar-thumb {
   background: var(--gold-dark);
   border-radius: 3px;
   border: 1px solid var(--gold-primary);
 }
 
-.wisdom-scroll-container::-webkit-scrollbar-thumb:hover {
+.wisdom-scroll-container::-webkit-scrollbar-thumb:hover,
+.matrix-container::-webkit-scrollbar-thumb:hover {
   background: var(--gold-bright);
 }
 
@@ -360,10 +370,12 @@ button.sub-btn:hover {
   border-radius: 4px;
   padding: 18px;
   position: relative;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
 .user-card.active-user-card {
   box-shadow: 0 0 18px rgba(212, 175, 55, 0.25);
+  transform: translateY(-2px);
 }
 
 .user-card-header {
@@ -414,6 +426,7 @@ button.sub-btn:hover {
   border-radius: 4px;
   border-left: 3px solid var(--card-border);
   margin-bottom: 14px;
+  transition: background-color 0.2s ease, border-color 0.2s ease;
 }
 
 .prayer-item.is-done {
@@ -457,6 +470,7 @@ button.sub-btn:hover {
   border-radius: 50%;
   background: #2a1b10;
   border: 1px solid #4a3220;
+  transition: background-color 0.3s ease, box-shadow 0.3s ease;
 }
 
 .bead.filled {
@@ -481,7 +495,7 @@ button.sub-btn:hover {
   resize: none;
 }
 
-/* Matrix Table */
+/* Matrix Table Container */
 .matrix-card {
   background: var(--card-bg);
   padding: 22px;
@@ -492,6 +506,11 @@ button.sub-btn:hover {
   color: var(--gold-primary);
   margin-bottom: 16px;
   font-size: 1.25rem;
+}
+
+.matrix-container {
+  overflow-x: auto;
+  max-width: 100%;
 }
 
 .matrix-table {
@@ -512,8 +531,12 @@ button.sub-btn:hover {
   font-family: 'Cinzel', serif;
 }
 
+.matrix-table tr:hover {
+  background: rgba(212, 175, 55, 0.05);
+}
+
 .matrix-table tr.active-row {
-  background: rgba(212, 175, 55, 0.12);
+  background: rgba(212, 175, 55, 0.15);
 }
 
 .matrix-status-dot {
@@ -522,6 +545,7 @@ button.sub-btn:hover {
   height: 11px;
   border-radius: 50%;
   background: #3a2719;
+  transition: background 0.3s ease, box-shadow 0.3s ease;
 }
 
 .matrix-status-dot.completed {
@@ -535,11 +559,25 @@ button.sub-btn:hover {
 
 /* Responsive Styles */
 @media (max-width: 650px) {
+  body {
+    padding: 16px 8px;
+  }
+
   .user-bar, .date-selector {
     flex-direction: column;
     align-items: stretch;
   }
+
   .auth-controls, .date-nav {
     justify-content: space-between;
+    width: 100%;
+  }
+
+  .date-display {
+    text-align: center;
+  }
+
+  h1 {
+    font-size: 1.75rem;
   }
 }
