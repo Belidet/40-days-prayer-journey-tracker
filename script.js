@@ -1,5 +1,5 @@
 // ==========================================
-// 1. CONFIGURATION
+// 1. CONFIGURATION & WISDOM DATA
 // ==========================================
 const USERS = ['Belidet', 'Ephi', 'Seli', 'Ermi'];
 
@@ -14,6 +14,50 @@ const PASSWORDS = {
 const START_DATE_STR = '2026-09-11';
 const TOTAL_DAYS = 40;
 const POLL_INTERVAL_MS = 10000;   // 10s polling interval
+
+// 40 Unique Sayings & Scripture Verses — One for each day of the journey
+const dailyWisdomArray = [
+  /* Day 1 */  '"Acquire a peaceful spirit, and thousands around you will be saved." — Abba Seraphim of Sarov',
+  /* Day 2 */  '"Go, sit in your cell, and your cell will teach you everything." — Abba Moses the Black',
+  /* Day 3 */  '"Pray without ceasing." — 1 Thessalonians 5:17',
+  /* Day 4 */  '"If a man does not say in his heart, \'Only I and God exist in this world,\' he will not find peace." — Abba Alois',
+  /* Day 5 */  '"Be angry and do not sin; do not let the sun go down on your wrath." — Ephesians 4:26',
+  /* Day 6 */  '"A tree cannot bear fruit if it is frequently transplanted; so it is with the monk." — Abba Anthony the Great',
+  /* Day 7 */  '"Blessed are the pure in heart, for they shall see God." — Matthew 5:8',
+  /* Day 8 */  '"Do not judge anyone, for in judging another you condemn yourself." — Abba Poemen',
+  /* Day 9 */  '"Trust in the LORD with all your heart, and lean not on your own understanding." — Proverbs 3:5',
+  /* Day 10 */ '"Silence is the mystery of the world to come, while speech is an instrument of this world." — Abba Isaac the Syrian',
+  /* Day 11 */ '"Set a guard, O LORD, over my mouth; keep watch over the door of my lips." — Psalm 141:3',
+  /* Day 12 */ '"If you pray truly, you will feel a great assurance, and the angels will walk with you." — Abba Nilus of Sinai',
+  /* Day 13 */ '"The light of the body is the eye: if therefore thine eye be single, thy whole body shall be full of light." — Matthew 6:22',
+  /* Day 14 */ '"Watch and pray, lest you enter into temptation; the spirit indeed is willing, but the flesh is weak." — Abba Arsenius',
+  /* Day 15 */ '"Rejoice in hope, be patient in tribulation, be constant in prayer." — Romans 12:12',
+  /* Day 16 */ '"Just as water extinguishes a fire, so does humility wash away sin." — Abba Hyperechius',
+  /* Day 17 */ '"The Lord is my light and my salvation; whom shall I fear?" — Psalm 27:1',
+  /* Day 18 */ '"Never seek human praise; seek only the quiet approval of God." — Abba Pambo',
+  /* Day 19 */ '"Draw near to God and He will draw near to you." — James 4:8',
+  /* Day 20 */ '"A man who bears a grudge in his heart is like a man who harbors a snake in his breast." — Abba Zosimas',
+  /* Day 21 */ '"Peace I leave with you, My peace I give to you; not as the world gives do I give to you." — John 14:27',
+  /* Day 22 */ '"Do not be anxious about anything, but in everything by prayer and supplication with thanksgiving let your requests be made known to God." — Philippians 4:6',
+  /* Day 23 */ '"As long as we are in the body, we must never trust our own heart." — Abba Agathon',
+  /* Day 24 */ '"Create in me a clean heart, O God, and renew a steadfast spirit within me." — Psalm 51:10',
+  /* Day 25 */ '"Prayer is the place of light, the refuge of the soul." — Abba Evagrius Ponticus',
+  /* Day 26 */ '"The humble man never falls; for where can he fall when he is below all?" — Abba Macarius the Great',
+  /* Day 27 */ '"Come to Me, all you who labor and are heavy laden, and I will give you rest." — Matthew 11:28',
+  /* Day 28 */ '"It is impossible to build a house without foundations; so it is impossible to be saved without humility." — Abba John the Dwarf',
+  /* Day 29 */ '"Your word is a lamp to my feet and a light to my path." — Psalm 119:105',
+  /* Day 30 */ '"Lust is checked by fasting and labor; pride is checked by solitude and prayer." — Abba Mark the Ascetic',
+  /* Day 31 */ '"Be still, and know that I am God." — Psalm 46:10',
+  /* Day 32 */ '"If you wish to find rest here and hereafter, say on every occasion: Who am I?" — Abba Sisoes',
+  /* Day 33 */ '"Fear not, for I am with you; be not dismayed, for I am your God." — Isaiah 41:10',
+  /* Day 34 */ '"To weep over one’s own sins is greater than to raise the dead by one’s prayers." — Abba Pachomius',
+  /* Day 35 */ '"Walk in the Spirit, and you shall not fulfill the lust of the flesh." — Galatians 5:16',
+  /* Day 36 */ '"He who returns good for evil changes an enemy into a brother." — Abba Dorotheus of Gaza',
+  /* Day 37 */ '"The kingdom of God does not come with observation; for indeed, the kingdom of God is within you." — Luke 17:20-21',
+  /* Day 38 */ '"Do not measure yourself against others, but measure yourself against the commandments of Christ." — Abba Cassian',
+  /* Day 39 */ '"I can do all things through Christ who strengthens me." — Philippians 4:13',
+  /* Day 40 */ '"He who perseveres to the end will be saved." — Matthew 24:13'
+];
 
 let loggedInUser = localStorage.getItem('orthodox_journey_user') || null;
 let selectedDateStr = START_DATE_STR;
@@ -218,7 +262,7 @@ function updateAuthUI() {
 }
 
 // ==========================================
-// 5. DATE NAVIGATION
+// 5. DATE NAVIGATION & DAILY WISDOM
 // ==========================================
 function changeDate(deltaDays) {
   const cur = parseLocalDate(selectedDateStr);
@@ -255,13 +299,25 @@ function onDatePicked(val) {
 function updateDateLabel() {
   const start = parseLocalDate(START_DATE_STR);
   const cur = parseLocalDate(selectedDateStr);
-  const diffDays = Math.round((cur - start) / (1000 * 60 * 60 * 24)) + 1;
+  const diffDays = Math.round((cur - start) / (1000 * 60 * 60 * 24)); // 0-indexed day count
+  const dayNum = diffDays + 1;
+  
   const options = { month: 'long', day: 'numeric', year: 'numeric' };
   const dateFormatted = cur.toLocaleDateString('en-US', options);
 
   const labelElement = document.getElementById('dateDisplayLabel');
   if (labelElement) {
-    labelElement.textContent = `Day ${diffDays} of 40 — ${dateFormatted}`;
+    labelElement.textContent = `Day ${dayNum} of 40 — ${dateFormatted}`;
+  }
+
+  // Update Daily Wisdom Text
+  updateDailyWisdom(diffDays);
+}
+
+function updateDailyWisdom(dayIndex) {
+  const wisdomBlock = document.getElementById('dailyWisdomText');
+  if (wisdomBlock && dayIndex >= 0 && dayIndex < TOTAL_DAYS) {
+    wisdomBlock.textContent = dailyWisdomArray[dayIndex];
   }
 }
 
