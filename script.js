@@ -34,6 +34,17 @@ function formatDateStr(dateObj) {
   return `${y}-${m}-${d}`;
 }
 
+// Helper: Escape HTML to prevent XSS in template literals
+function escapeHTML(str) {
+  if (!str) return '';
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
 // ==========================================
 // 2. CLOUD SYNC
 // ==========================================
@@ -60,11 +71,16 @@ setInterval(loadCloudData, POLL_INTERVAL_MS);
 // ==========================================
 // 3. SOUND & VISUAL FX
 // ==========================================
-function playGentleChime() {
+async function playGentleChime() {
   try {
     const AudioCtx = window.AudioContext || window.webkitAudioContext;
     if (!AudioCtx) return;
     const ctx = new AudioCtx();
+    
+    if (ctx.state === 'suspended') {
+      await ctx.resume();
+    }
+
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
     osc.type = 'sine';
@@ -196,6 +212,10 @@ function changeDate(deltaDays) {
 function onDatePicked(val) {
   if (!val) return;
   selectedDateStr = val;
+
+  const picker = document.getElementById('journeyDatePicker');
+  if (picker) picker.value = selectedDateStr;
+
   updateDateLabel();
   renderDashboard();
   renderMatrix();
@@ -390,7 +410,7 @@ function renderDashboard() {
       <div class="note-box">
         <textarea placeholder="${isUserLoggedIn ? 'Daily prayer reflection...' : 'No reflection recorded.'}" 
                   ${!isUserLoggedIn ? 'disabled' : ''} 
-                  onchange="saveNote('${user}', this.value)">${data.note || ''}</textarea>
+                  onchange="saveNote('${user}', this.value)">${escapeHTML(data.note || '')}</textarea>
       </div>
     `;
 
