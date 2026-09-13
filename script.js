@@ -96,6 +96,7 @@ function escapeHTML(str) {
 // 2. CLOUD SYNC
 // ==========================================
 async function loadCloudData() {
+  // Never pull from cloud while user is actively saving or modifying state
   if (isSaving) return;
 
   try {
@@ -104,9 +105,14 @@ async function loadCloudData() {
       console.warn('GET /api/prayer returned status:', response.status);
       return;
     }
-    cloudData = await response.json();
-    renderDashboard();
-    renderMatrix();
+    const freshData = await response.json();
+    
+    // Double-check guard before overwriting local state
+    if (!isSaving) {
+      cloudData = freshData;
+      renderDashboard();
+      renderMatrix();
+    }
   } catch (err) {
     console.error('Failed to connect to Vercel Storage:', err);
   }
@@ -331,31 +337,33 @@ async function togglePrayer(user, prayerType) {
     return;
   }
 
-  // 1. Prepare optimistic state structure
-  if (!cloudData[selectedDateStr]) cloudData[selectedDateStr] = {};
-  if (!cloudData[selectedDateStr][user]) {
-    cloudData[selectedDateStr][user] = { jesus: false, theotokos: false, note: '' };
-  }
-
-  const userData = cloudData[selectedDateStr][user];
-  const newStatus = !userData[prayerType];
-  userData[prayerType] = newStatus;
-
-  // 2. Instant UI re-render (Zero delay response)
-  renderDashboard();
-  renderMatrix();
-
-  // 3. Trigger immediate audio & visual feedback
-  if (newStatus) {
-    playGentleChime();
-    if (userData.jesus && userData.theotokos) {
-      triggerGoldenIncense();
-    }
-  }
-
-  // 4. Background Sync to Server
+  // Lock polling IMMEDIATELY before modifying local memory
   isSaving = true;
+
   try {
+    // 1. Prepare optimistic state structure
+    if (!cloudData[selectedDateStr]) cloudData[selectedDateStr] = {};
+    if (!cloudData[selectedDateStr][user]) {
+      cloudData[selectedDateStr][user] = { jesus: false, theotokos: false, note: '' };
+    }
+
+    const userData = cloudData[selectedDateStr][user];
+    const newStatus = !userData[prayerType];
+    userData[prayerType] = newStatus;
+
+    // 2. Instant UI re-render
+    renderDashboard();
+    renderMatrix();
+
+    // 3. Sound & Visual FX
+    if (newStatus) {
+      playGentleChime();
+      if (userData.jesus && userData.theotokos) {
+        triggerGoldenIncense();
+      }
+    }
+
+    // 4. Post update to server
     const res = await fetch('/api/prayer', {
       method: 'POST',
       cache: 'no-store',
@@ -370,7 +378,6 @@ async function togglePrayer(user, prayerType) {
       const errBody = await res.text();
       console.error('Save failed:', res.status, errBody);
       alert('Could not save to server. Reverting status...');
-      // Revert local state on failure
       userData[prayerType] = !newStatus;
       renderDashboard();
       renderMatrix();
@@ -385,10 +392,13 @@ async function togglePrayer(user, prayerType) {
   } catch (err) {
     console.error('Network error:', err);
     alert('Network error — change not saved. Reverting status...');
-    userData[prayerType] = !newStatus;
+    if (cloudData[selectedDateStr] && cloudData[selectedDateStr][user]) {
+      cloudData[selectedDateStr][user][prayerType] = !cloudData[selectedDateStr][user][prayerType];
+    }
     renderDashboard();
     renderMatrix();
   } finally {
+    // Unlock polling after state is safely updated
     isSaving = false;
   }
 }
