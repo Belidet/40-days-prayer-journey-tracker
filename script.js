@@ -11,7 +11,7 @@ const PASSWORDS = {
 
 const START_DATE_STR = '2026-09-11';
 const TOTAL_DAYS = 40;
-const POLL_INTERVAL_MS = 10000;   // 10s — was 5s; kinder to server, still feels instant
+const POLL_INTERVAL_MS = 10000;   // 10s polling interval
 
 let loggedInUser = localStorage.getItem('orthodox_journey_user') || null;
 let selectedDateStr = START_DATE_STR;
@@ -20,12 +20,24 @@ let cloudData = {};
 // Guard flag: prevents background polling from overwriting an in-flight save
 let isSaving = false;
 
+// Helper: Safely parse YYYY-MM-DD into a local Date without UTC offset shifts
+function parseLocalDate(dateStr) {
+  const [year, month, day] = dateStr.split('-').map(Number);
+  return new Date(year, month - 1, day);
+}
+
+// Helper: Format Date object to YYYY-MM-DD
+function formatDateStr(dateObj) {
+  const y = dateObj.getFullYear();
+  const m = String(dateObj.getMonth() + 1).padStart(2, '0');
+  const d = String(dateObj.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
 // ==========================================
 // 2. CLOUD SYNC
 // ==========================================
 async function loadCloudData() {
-  // Skip polling refresh while a save is in-flight to avoid
-  // overwriting the user's pending change with stale server data
   if (isSaving) return;
 
   try {
@@ -42,7 +54,7 @@ async function loadCloudData() {
   }
 }
 
-// Start auto-polling so changes on one device show on all
+// Auto-polling setup
 setInterval(loadCloudData, POLL_INTERVAL_MS);
 
 // ==========================================
@@ -64,7 +76,9 @@ function playGentleChime() {
     gain.connect(ctx.destination);
     osc.start();
     osc.stop(ctx.currentTime + 2.0);
-  } catch (e) {}
+  } catch (e) {
+    console.warn('AudioContext prevented or not supported:', e);
+  }
 }
 
 function triggerGoldenIncense() {
@@ -148,12 +162,11 @@ function updateAuthUI() {
   const nameDisplay = document.getElementById('currentUserName');
   const logoutBtn = document.getElementById('logoutBtn');
 
-  if (loggedInUser) {
-    nameDisplay.textContent = loggedInUser;
-    logoutBtn.style.display = 'inline-block';
-  } else {
-    nameDisplay.textContent = 'Guest (View Only)';
-    logoutBtn.style.display = 'none';
+  if (nameDisplay) {
+    nameDisplay.textContent = loggedInUser ? loggedInUser : 'Guest (View Only)';
+  }
+  if (logoutBtn) {
+    logoutBtn.style.display = loggedInUser ? 'inline-block' : 'none';
   }
 }
 
@@ -161,23 +174,27 @@ function updateAuthUI() {
 // 5. DATE NAVIGATION
 // ==========================================
 function changeDate(deltaDays) {
-  const cur = new Date(selectedDateStr);
+  const cur = parseLocalDate(selectedDateStr);
   cur.setDate(cur.getDate() + deltaDays);
 
-  const start = new Date(START_DATE_STR);
-  const end = new Date(START_DATE_STR);
+  const start = parseLocalDate(START_DATE_STR);
+  const end = parseLocalDate(START_DATE_STR);
   end.setDate(end.getDate() + TOTAL_DAYS - 1);
 
   if (cur < start || cur > end) return;
 
-  selectedDateStr = cur.toISOString().split('T')[0];
-  document.getElementById('journeyDatePicker').value = selectedDateStr;
+  selectedDateStr = formatDateStr(cur);
+  
+  const picker = document.getElementById('journeyDatePicker');
+  if (picker) picker.value = selectedDateStr;
+
   updateDateLabel();
   renderDashboard();
   renderMatrix();
 }
 
 function onDatePicked(val) {
+  if (!val) return;
   selectedDateStr = val;
   updateDateLabel();
   renderDashboard();
@@ -185,13 +202,16 @@ function onDatePicked(val) {
 }
 
 function updateDateLabel() {
-  const start = new Date(START_DATE_STR);
-  const cur = new Date(selectedDateStr);
+  const start = parseLocalDate(START_DATE_STR);
+  const cur = parseLocalDate(selectedDateStr);
   const diffDays = Math.round((cur - start) / (1000 * 60 * 60 * 24)) + 1;
   const options = { month: 'long', day: 'numeric', year: 'numeric' };
   const dateFormatted = cur.toLocaleDateString('en-US', options);
 
-  document.getElementById('dateDisplayLabel').textContent = `Day ${diffDays} of 40 — ${dateFormatted}`;
+  const labelElement = document.getElementById('dateDisplayLabel');
+  if (labelElement) {
+    labelElement.textContent = `Day ${diffDays} of 40 — ${dateFormatted}`;
+  }
 }
 
 // ==========================================
@@ -209,7 +229,7 @@ async function togglePrayer(user, prayerType) {
   const newStatus = !userData[prayerType];
   userData[prayerType] = newStatus;
 
-  // Optimistic UI update — show change immediately
+  // Optimistic UI update
   if (!cloudData[selectedDateStr]) cloudData[selectedDateStr] = {};
   cloudData[selectedDateStr][user] = userData;
   renderDashboard();
@@ -222,8 +242,6 @@ async function togglePrayer(user, prayerType) {
     }
   }
 
-  // Block polling while save is in-flight so the refresh doesn't
-  // overwrite the change we just made locally
   isSaving = true;
   try {
     const res = await fetch('/api/prayer', {
@@ -240,10 +258,8 @@ async function togglePrayer(user, prayerType) {
       const errBody = await res.text();
       console.error('Save failed:', res.status, errBody);
       alert('Could not save to server. Please check your connection.');
-      // Revert optimistic UI by pulling fresh data
       await loadCloudData();
     } else {
-      // Sync from server response so all devices see the same state
       const payload = await res.json();
       if (payload && payload.data) {
         cloudData = payload.data;
@@ -314,6 +330,7 @@ function get40DayCompletionCount(user) {
 // ==========================================
 function renderDashboard() {
   const container = document.getElementById('pilgrimsDashboard');
+  if (!container) return;
   container.innerHTML = '';
 
   const dayData = cloudData[selectedDateStr] || {};
@@ -330,7 +347,7 @@ function renderDashboard() {
     card.innerHTML = `
       <div class="user-card-header">
         <h2>${user}</h2>
-        <span style="font-size:0.85rem; color:var(--gold-bright); font-weight:bold;">${totalCompleted}/40 Days</span>
+        <span style="font-size:0.85rem; color:var(--gold-bright, #ffd700); font-weight:bold;">${totalCompleted}/40 Days</span>
       </div>
 
       <div class="progress-container">
@@ -348,7 +365,7 @@ function renderDashboard() {
         <div class="prayer-name">"Lord Jesus Christ Son of God have mercy on me a sinner."</div>
         <button type="button" class="status-toggle-btn ${data.jesus ? 'done' : ''}" 
                 onclick="togglePrayer('${user}', 'jesus')"
-                ${!isUserLoggedIn ? 'style="opacity:0.75;"' : ''}>
+                ${!isUserLoggedIn ? 'disabled style="opacity:0.6; cursor:not-allowed;"' : ''}>
           ${data.jesus ? '✓ Prayer Completed' : 'Mark as Done'}
         </button>
         <div class="beads-container">
@@ -361,7 +378,7 @@ function renderDashboard() {
         <div class="prayer-name">"Most Holy Theotokos save me!"</div>
         <button type="button" class="status-toggle-btn ${data.theotokos ? 'done' : ''}" 
                 onclick="togglePrayer('${user}', 'theotokos')"
-                ${!isUserLoggedIn ? 'style="opacity:0.75;"' : ''}>
+                ${!isUserLoggedIn ? 'disabled style="opacity:0.6; cursor:not-allowed;"' : ''}>
           ${data.theotokos ? '✓ Prayer Completed' : 'Mark as Done'}
         </button>
         <div class="beads-container">
@@ -386,22 +403,21 @@ function renderDashboard() {
 // ==========================================
 function renderMatrix() {
   const table = document.getElementById('journeyMatrixTable');
-  table.innerHTML = '';
+  if (!table) return;
 
-  let headerRow = `<tr><th>Day</th><th>Date</th>`;
-  USERS.forEach(u => headerRow += `<th>${u}</th>`);
-  headerRow += `</tr>`;
-  table.innerHTML += headerRow;
+  let tableContent = `<thead><tr><th>Day</th><th>Date</th>`;
+  USERS.forEach(u => tableContent += `<th>${u}</th>`);
+  tableContent += `</tr></thead><tbody>`;
 
-  const startDate = new Date(START_DATE_STR);
+  const startDate = parseLocalDate(START_DATE_STR);
 
   for (let i = 0; i < TOTAL_DAYS; i++) {
     const d = new Date(startDate);
     d.setDate(d.getDate() + i);
-    const dateStr = d.toISOString().split('T')[0];
+    const dateStr = formatDateStr(d);
     const isSelected = (dateStr === selectedDateStr);
 
-    let rowHtml = `<tr class="${isSelected ? 'active-row' : ''}">
+    tableContent += `<tr class="${isSelected ? 'active-row' : ''}" onclick="onDatePicked('${dateStr}')" style="cursor:pointer;">
       <td>Day ${i + 1}</td>
       <td style="font-size:0.8rem;">${d.getMonth() + 1}/${d.getDate()}</td>`;
 
@@ -411,17 +427,24 @@ function renderMatrix() {
       if (rec && rec.jesus && rec.theotokos) statusClass = 'completed';
       else if (rec && (rec.jesus || rec.theotokos)) statusClass = 'partial';
 
-      rowHtml += `<td><span class="matrix-status-dot ${statusClass}"></span></td>`;
+      tableContent += `<td><span class="matrix-status-dot ${statusClass}"></span></td>`;
     });
 
-    rowHtml += `</tr>`;
-    table.innerHTML += rowHtml;
+    tableContent += `</tr>`;
   }
+
+  tableContent += `</tbody>`;
+  table.innerHTML = tableContent;
 }
 
 // ==========================================
 // 10. BOOTSTRAP
 // ==========================================
-loadCloudData();
-updateAuthUI();
-updateDateLabel();
+document.addEventListener('DOMContentLoaded', () => {
+  loadCloudData();
+  updateAuthUI();
+  updateDateLabel();
+  
+  const picker = document.getElementById('journeyDatePicker');
+  if (picker) picker.value = selectedDateStr;
+});
