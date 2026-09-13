@@ -43,23 +43,28 @@
         <span>Current Pilgrim:</span> <strong id="currentUserName">Guest (View Only)</strong>
       </div>
       <div class="auth-controls">
-        <select id="userSelect" aria-label="Select Pilgrim">
-          <option value="">Select Pilgrim...</option>
-          <option value="Belidet">Belidet</option>
-          <option value="Ephi">Ephi</option>
-          <option value="Seli">Seli</option>
-          <option value="Ermi">Ermi</option>
-        </select>
+        <!-- Login Controls Group (Hidden upon login) -->
+        <div id="loginControls" style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+          <select id="userSelect" aria-label="Select Pilgrim">
+            <option value="">Select Pilgrim...</option>
+            <option value="Belidet">Belidet</option>
+            <option value="Ephi">Ephi</option>
+            <option value="Seli">Seli</option>
+            <option value="Ermi">Ermi</option>
+          </select>
 
-        <!-- Password Input Wrapper -->
-        <div class="password-wrapper">
-          <input type="password" id="passInput" placeholder="Password" aria-label="Password">
-          <button type="button" id="togglePassBtn" class="pass-toggle-btn" onclick="togglePasswordVisibility()" aria-label="Toggle password visibility">
-            👁️
-          </button>
+          <!-- Password Input Wrapper -->
+          <div class="password-wrapper">
+            <input type="password" id="passInput" placeholder="Password" aria-label="Password">
+            <button type="button" id="togglePassBtn" class="pass-toggle-btn" onclick="togglePasswordVisibility()" aria-label="Toggle password visibility">
+              👁️
+            </button>
+          </div>
+
+          <button type="button" onclick="loginUser()">Log In</button>
         </div>
 
-        <button type="button" onclick="loginUser()">Log In</button>
+        <!-- Logout Button (Shown upon login) -->
         <button type="button" onclick="logoutUser()" class="sub-btn" id="logoutBtn" style="display:none;">Log Out</button>
       </div>
     </section>
