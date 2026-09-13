@@ -1,65 +1,56 @@
-// api/prayer.js
-import { put, list, get, del } from '@vercel/blob';
+import { createClient } from '@supabase/supabase-js';
 
-const FILE_NAME = 'orthodox_prayer_data.json';
+// Clean the base URL (strip trailing /rest/v1/ if present)
+const RAW_URL = 'https://cbwfftouxjyfgneieecw.supabase.co/rest/v1/';
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || RAW_URL.replace(/\/rest\/v1\/?$/, '');
 
-// ---------------------------------------------------------------
-// Helper: read the current prayer data from Vercel Blob
-// Uses get() instead of fetch(blob.url) — works for both
-// public and private stores, handles auth automatically.
-// ---------------------------------------------------------------
-async function readCurrentData() {
-  try {
-    const { blobs } = await list();
-    const targetBlob = blobs.find(b => b.pathname === FILE_NAME);
-    if (!targetBlob) return {};
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || 
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNid2ZmdG91eGp5ZmduZWllZWN3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODkyODIyMzEsImV4cCI6MjEwNDg1ODIzMX0.fRcFCYO1CK1U9rmyPkqiOkKhvuGFxdVeuSYKiP6SJK0';
 
-    // get() with access: 'private' works for private stores.
-    // Change to 'public' if your store is Public access.
-    const result = await get(targetBlob.url, { access: 'public' });
-    if (!result || !result.stream) return {};
-
-    const text = await new Response(result.stream).text();
-    if (!text || !text.trim()) return {};
-    return JSON.parse(text);
-  } catch (e) {
-    console.error('readCurrentData error:', e.message);
-    return {};
-  }
-}
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 export default async function handler(req, res) {
-  // ----- CORS headers -----
+  // CORS Headers
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
-  // ----- Prevent Vercel Edge CDN from caching API responses -----
-  // Without these, different devices may get stale cached data
-  // and cross-device sync will silently break.
+  // Prevent Edge CDN Caching
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
   res.setHeader('CDN-Cache-Control', 'no-store');
   res.setHeader('Vercel-CDN-Cache-Control', 'no-store');
 
-  // ----- Preflight -----
+  // Preflight
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
   }
 
   try {
     // =========================================================
-    // GET — return all stored prayer data
+    // GET — return all stored prayer data mapped by dateKey
     // =========================================================
     if (req.method === 'GET') {
-      const data = await readCurrentData();
-      return res.status(200).json(data);
+      const { data, error } = await supabase
+        .from('prayer_progress')
+        .select('date_key, user_data');
+
+      if (error) throw error;
+
+      const formattedData = {};
+      if (data) {
+        data.forEach((row) => {
+          formattedData[row.date_key] = row.user_data;
+        });
+      }
+
+      return res.status(200).json(formattedData);
     }
 
     // =========================================================
-    // POST — merge new user data for a specific date and save
+    // POST — merge user data for a specific date and upsert
     // =========================================================
     if (req.method === 'POST') {
-      // Safely parse body whether it's a string or object
       const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
       const { dateKey, userData } = body || {};
 
@@ -70,32 +61,37 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: 'Missing or invalid userData in request body.' });
       }
 
-      // 1. Read current state
-      const currentData = await readCurrentData();
+      // 1. Fetch current record for this specific date
+      const { data: existingRecord } = await supabase
+        .from('prayer_progress')
+        .select('user_data')
+        .eq('date_key', dateKey)
+        .maybeSingle();
 
-      // 2. Merge new user progress under the specific date
-      if (!currentData[dateKey]) {
-        currentData[dateKey] = {};
-      }
-      currentData[dateKey] = {
-        ...currentData[dateKey],
+      const currentUserData = existingRecord?.user_data || {};
+      const mergedUserData = {
+        ...currentUserData,
         ...userData,
       };
 
-      // 3. Write updated dataset back to Vercel Blob
-      //    allowOverwrite: true is REQUIRED — without it, every
-      //    save after the first one fails because the file exists.
-      const blob = await put(FILE_NAME, JSON.stringify(currentData), {
-        access: 'public',
-        contentType: 'application/json',
-        addRandomSuffix: false,
-        allowOverwrite: true,
-      });
+      // 2. Upsert updated data into Supabase
+      const { data, error } = await supabase
+        .from('prayer_progress')
+        .upsert(
+          {
+            date_key: dateKey,
+            user_data: mergedUserData,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: 'date_key' }
+        )
+        .select();
+
+      if (error) throw error;
 
       return res.status(200).json({
         success: true,
-        url: blob.url,
-        data: currentData,
+        data: mergedUserData,
       });
     }
 
@@ -103,19 +99,16 @@ export default async function handler(req, res) {
     // DELETE — reset all prayer journey data
     // =========================================================
     if (req.method === 'DELETE') {
-      const { blobs } = await list();
-      const targetBlob = blobs.find(b => b.pathname === FILE_NAME);
+      const { error } = await supabase
+        .from('prayer_progress')
+        .delete()
+        .neq('id', 0); // Deletes all rows
 
-      if (targetBlob) {
-        await del(targetBlob.url);
-      }
+      if (error) throw error;
 
       return res.status(200).json({ success: true, message: 'Prayer journey data reset.' });
     }
 
-    // =========================================================
-    // Anything else
-    // =========================================================
     return res.status(405).json({ error: 'Method not allowed' });
   } catch (error) {
     console.error('API Error:', error);
