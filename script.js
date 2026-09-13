@@ -331,18 +331,21 @@ async function togglePrayer(user, prayerType) {
     return;
   }
 
-  const dayData = cloudData[selectedDateStr] || {};
-  const userData = dayData[user] || { jesus: false, theotokos: false, note: '' };
+  // 1. Prepare optimistic state structure
+  if (!cloudData[selectedDateStr]) cloudData[selectedDateStr] = {};
+  if (!cloudData[selectedDateStr][user]) {
+    cloudData[selectedDateStr][user] = { jesus: false, theotokos: false, note: '' };
+  }
 
+  const userData = cloudData[selectedDateStr][user];
   const newStatus = !userData[prayerType];
   userData[prayerType] = newStatus;
 
-  // Optimistic UI update
-  if (!cloudData[selectedDateStr]) cloudData[selectedDateStr] = {};
-  cloudData[selectedDateStr][user] = userData;
+  // 2. Instant UI re-render (Zero delay response)
   renderDashboard();
   renderMatrix();
 
+  // 3. Trigger immediate audio & visual feedback
   if (newStatus) {
     playGentleChime();
     if (userData.jesus && userData.theotokos) {
@@ -350,6 +353,7 @@ async function togglePrayer(user, prayerType) {
     }
   }
 
+  // 4. Background Sync to Server
   isSaving = true;
   try {
     const res = await fetch('/api/prayer', {
@@ -365,8 +369,11 @@ async function togglePrayer(user, prayerType) {
     if (!res.ok) {
       const errBody = await res.text();
       console.error('Save failed:', res.status, errBody);
-      alert('Could not save to server. Please check your connection.');
-      await loadCloudData();
+      alert('Could not save to server. Reverting status...');
+      // Revert local state on failure
+      userData[prayerType] = !newStatus;
+      renderDashboard();
+      renderMatrix();
     } else {
       const payload = await res.json();
       if (payload && payload.data) {
@@ -377,7 +384,10 @@ async function togglePrayer(user, prayerType) {
     }
   } catch (err) {
     console.error('Network error:', err);
-    alert('Network error — change not saved.');
+    alert('Network error — change not saved. Reverting status...');
+    userData[prayerType] = !newStatus;
+    renderDashboard();
+    renderMatrix();
   } finally {
     isSaving = false;
   }
