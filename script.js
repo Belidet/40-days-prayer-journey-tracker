@@ -246,12 +246,13 @@ function logoutUser() {
 }
 
 function updateAuthUI() {
+  const loginControls = document.getElementById('loginControls');
   const nameDisplay = document.getElementById('currentUserName');
   const logoutBtn = document.getElementById('logoutBtn');
   const passInput = document.getElementById('passInput');
   const toggleBtn = document.getElementById('togglePassBtn');
 
-  // Reset password visibility field to standard state on state change
+  // Reset password field visibility to default state
   if (passInput && passInput.type === 'text') {
     passInput.type = 'password';
     if (toggleBtn) {
@@ -260,11 +261,20 @@ function updateAuthUI() {
     }
   }
 
-  if (nameDisplay) {
-    nameDisplay.textContent = loggedInUser ? loggedInUser : 'Guest (View Only)';
-  }
-  if (logoutBtn) {
-    logoutBtn.style.display = loggedInUser ? 'inline-block' : 'none';
+  if (loggedInUser) {
+    // Hide the login input section completely
+    if (loginControls) loginControls.style.display = 'none';
+    
+    // Display logged in pilgrim name and show only Log Out button
+    if (nameDisplay) nameDisplay.textContent = loggedInUser;
+    if (logoutBtn) logoutBtn.style.display = 'inline-block';
+  } else {
+    // Show the login input section when logged out / guest mode
+    if (loginControls) loginControls.style.display = 'flex';
+    
+    // Display default Guest text and hide Log Out button
+    if (nameDisplay) nameDisplay.textContent = 'Guest (View Only)';
+    if (logoutBtn) logoutBtn.style.display = 'none';
   }
 }
 
