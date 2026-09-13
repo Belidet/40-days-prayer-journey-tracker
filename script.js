@@ -2,6 +2,8 @@
 // 1. CONFIGURATION
 // ==========================================
 const USERS = ['Belidet', 'Ephi', 'Seli', 'Ermi'];
+
+// Note: For production, authenticate credentials via backend POST requests
 const PASSWORDS = {
   Belidet: 'belidet123',
   Ephi: 'ephi123',
@@ -17,7 +19,7 @@ let loggedInUser = localStorage.getItem('orthodox_journey_user') || null;
 let selectedDateStr = START_DATE_STR;
 let cloudData = {};
 
-// Guard flag: prevents background polling from overwriting an in-flight save
+// Guard flag: prevents background polling from overwriting an in-flight save or active editing
 let isSaving = false;
 
 // Helper: Safely parse YYYY-MM-DD into a local Date without UTC offset shifts
@@ -54,7 +56,7 @@ async function loadCloudData() {
   try {
     const response = await fetch('/api/prayer', { cache: 'no-store' });
     if (!response.ok) {
-      console.warn('GET /api/prayer returned', response.status);
+      console.warn('GET /api/prayer returned status:', response.status);
       return;
     }
     cloudData = await response.json();
@@ -88,8 +90,10 @@ async function playGentleChime() {
     osc.frequency.exponentialRampToValueAtTime(261.63, ctx.currentTime + 2.0);
     gain.gain.setValueAtTime(0.25, ctx.currentTime);
     gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 2.0);
+    
     osc.connect(gain);
     gain.connect(ctx.destination);
+    
     osc.start();
     osc.stop(ctx.currentTime + 2.0);
   } catch (e) {
@@ -148,8 +152,13 @@ function triggerGoldenIncense() {
 // 4. AUTHENTICATION
 // ==========================================
 function loginUser() {
-  const user = document.getElementById('userSelect').value;
-  const pass = document.getElementById('passInput').value;
+  const userSelect = document.getElementById('userSelect');
+  const passInput = document.getElementById('passInput');
+  
+  if (!userSelect || !passInput) return;
+
+  const user = userSelect.value;
+  const pass = passInput.value;
 
   if (!user) {
     alert('Please select a pilgrim.');
@@ -159,7 +168,7 @@ function loginUser() {
   if (PASSWORDS[user] === pass) {
     loggedInUser = user;
     localStorage.setItem('orthodox_journey_user', user);
-    document.getElementById('passInput').value = '';
+    passInput.value = '';
     updateAuthUI();
     renderDashboard();
   } else {
@@ -235,7 +244,7 @@ function updateDateLabel() {
 }
 
 // ==========================================
-// 6. SAVE PRAYER PROGRESS
+// 6. SAVE PRAYER PROGRESS & NOTES
 // ==========================================
 async function togglePrayer(user, prayerType) {
   if (loggedInUser !== user) {
@@ -302,6 +311,7 @@ async function saveNote(user, noteText) {
   const userData = dayData[user] || { jesus: false, theotokos: false, note: '' };
   userData.note = noteText;
 
+  // Optimistically commit note to local state
   if (!cloudData[selectedDateStr]) cloudData[selectedDateStr] = {};
   cloudData[selectedDateStr][user] = userData;
 
@@ -332,16 +342,23 @@ async function saveNote(user, noteText) {
 // ==========================================
 function get40DayCompletionCount(user) {
   let count = 0;
-  Object.keys(cloudData).forEach(date => {
+  const startDate = parseLocalDate(START_DATE_STR);
+
+  // Accurately count only within the 40-day window
+  for (let i = 0; i < TOTAL_DAYS; i++) {
+    const d = new Date(startDate);
+    d.setDate(d.getDate() + i);
+    const dateKey = formatDateStr(d);
+
     if (
-      cloudData[date] &&
-      cloudData[date][user] &&
-      cloudData[date][user].jesus &&
-      cloudData[date][user].theotokos
+      cloudData[dateKey] &&
+      cloudData[dateKey][user] &&
+      cloudData[dateKey][user].jesus &&
+      cloudData[dateKey][user].theotokos
     ) {
       count++;
     }
-  });
+  }
   return count;
 }
 
@@ -366,7 +383,7 @@ function renderDashboard() {
 
     card.innerHTML = `
       <div class="user-card-header">
-        <h2>${user}</h2>
+        <h2>${escapeHTML(user)}</h2>
         <span style="font-size:0.85rem; color:var(--gold-bright, #ffd700); font-weight:bold;">${totalCompleted}/40 Days</span>
       </div>
 
@@ -426,7 +443,7 @@ function renderMatrix() {
   if (!table) return;
 
   let tableContent = `<thead><tr><th>Day</th><th>Date</th>`;
-  USERS.forEach(u => tableContent += `<th>${u}</th>`);
+  USERS.forEach(u => tableContent += `<th>${escapeHTML(u)}</th>`);
   tableContent += `</tr></thead><tbody>`;
 
   const startDate = parseLocalDate(START_DATE_STR);
