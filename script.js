@@ -149,8 +149,19 @@ function triggerGoldenIncense() {
 }
 
 // ==========================================
-// 4. AUTHENTICATION
+// 4. AUTHENTICATION & UTILITIES
 // ==========================================
+function togglePasswordVisibility() {
+  const passInput = document.getElementById('passInput');
+  const toggleBtn = document.getElementById('togglePassBtn');
+  if (!passInput || !toggleBtn) return;
+
+  const isPassword = passInput.type === 'password';
+  passInput.type = isPassword ? 'text' : 'password';
+  toggleBtn.textContent = isPassword ? '🙈' : '👁️';
+  toggleBtn.setAttribute('aria-label', isPassword ? 'Hide password' : 'Show password');
+}
+
 function loginUser() {
   const userSelect = document.getElementById('userSelect');
   const passInput = document.getElementById('passInput');
@@ -186,6 +197,17 @@ function logoutUser() {
 function updateAuthUI() {
   const nameDisplay = document.getElementById('currentUserName');
   const logoutBtn = document.getElementById('logoutBtn');
+  const passInput = document.getElementById('passInput');
+  const toggleBtn = document.getElementById('togglePassBtn');
+
+  // Reset password visibility field to standard state on state change
+  if (passInput && passInput.type === 'text') {
+    passInput.type = 'password';
+    if (toggleBtn) {
+      toggleBtn.textContent = '👁️';
+      toggleBtn.setAttribute('aria-label', 'Toggle password visibility');
+    }
+  }
 
   if (nameDisplay) {
     nameDisplay.textContent = loggedInUser ? loggedInUser : 'Guest (View Only)';
