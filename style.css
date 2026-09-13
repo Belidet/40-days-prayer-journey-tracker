@@ -262,6 +262,65 @@ button.sub-btn:hover {
   font-size: 1.02rem;
 }
 
+/* Wisdom Card & Scrollable Container */
+.wisdom-card {
+  background: var(--card-bg);
+  padding: 20px 24px;
+  border-radius: 4px;
+  margin-bottom: 25px;
+  position: relative;
+}
+
+.wisdom-card h3 {
+  color: var(--gold-primary);
+  margin-bottom: 12px;
+  font-size: 1.2rem;
+  border-bottom: 1px solid rgba(212, 175, 55, 0.2);
+  padding-bottom: 6px;
+}
+
+.wisdom-scroll-container {
+  max-height: 200px;
+  overflow-y: auto;
+  padding-right: 10px;
+  color: var(--text-main);
+  font-size: 1.05rem;
+  line-height: 1.6;
+}
+
+.wisdom-scroll-container blockquote {
+  border-left: 3px solid var(--gold-primary);
+  padding-left: 14px;
+  margin: 0;
+  font-style: italic;
+  color: var(--gold-bright);
+}
+
+.wisdom-scroll-container blockquote strong {
+  font-style: normal;
+  color: var(--text-main);
+}
+
+/* Custom Gold Scrollbar for Wisdom Container */
+.wisdom-scroll-container::-webkit-scrollbar {
+  width: 6px;
+}
+
+.wisdom-scroll-container::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.5);
+  border-radius: 3px;
+}
+
+.wisdom-scroll-container::-webkit-scrollbar-thumb {
+  background: var(--gold-dark);
+  border-radius: 3px;
+  border: 1px solid var(--gold-primary);
+}
+
+.wisdom-scroll-container::-webkit-scrollbar-thumb:hover {
+  background: var(--gold-bright);
+}
+
 /* Date Selector */
 .date-selector {
   background: var(--card-bg);
