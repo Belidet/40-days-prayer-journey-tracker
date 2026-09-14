@@ -58,16 +58,15 @@ const dailyWisdomArray = [
 ];
 
 let loggedInUser = localStorage.getItem('orthodox_journey_user') || null;
-let selectedDateStr = START_DATE_STR;
 let cloudData = {};
 
 // Polling guards
 let isSaving = false;       // blocks the poll while a save is in flight
 let noteEditing = false;    // blocks the poll while user is typing in a note
-let lastDataHash = '';      // used to skip re-render if the poll returns identical data  // ← NEW
+let lastDataHash = '';      // used to skip re-render if the poll returns identical data
 
 // ==========================================
-// 1b. NON-BLOCKING TOAST (replaces alert)     // ← NEW
+// 1b. NON-BLOCKING TOAST (replaces alert)
 // ==========================================
 function toast(msg, ms = 2500) {
   let el = document.getElementById('_toast');
@@ -97,7 +96,7 @@ function toast(msg, ms = 2500) {
 }
 
 // ==========================================
-// 1c. PRE-COMPUTED DATE KEYS                 // ← NEW (huge perf win)
+// 1c. DATE HELPERS & PRE-COMPUTED DATE KEYS
 // ==========================================
 function parseLocalDate(dateStr) {
   const [year, month, day] = dateStr.split('-').map(Number);
@@ -121,6 +120,29 @@ const DATE_KEYS = (() => {
   return out;
 })();
 
+// ← NEW: live "today" helpers
+function todayStr() {
+  return formatDateStr(new Date());
+}
+
+// 0 = Day 1, 39 = Day 40, negative = before journey, ≥40 = after journey
+function currentJourneyDayIndex() {
+  const start = parseLocalDate(START_DATE_STR);
+  const today = parseLocalDate(todayStr());
+  return Math.round((today - start) / (1000 * 60 * 60 * 24));
+}
+
+// What date should the app open on? Today, clamped into the 40-day window.
+function defaultSelectedDate() {
+  const idx = currentJourneyDayIndex();
+  if (idx < 0) return DATE_KEYS[0];                                // before journey
+  if (idx >= TOTAL_DAYS) return DATE_KEYS[DATE_KEYS.length - 1];   // after journey
+  return todayStr();                                               // today
+}
+
+// ← CHANGED: initialize selection to "today" instead of Day 1
+let selectedDateStr = defaultSelectedDate();
+
 function escapeHTML(str) {
   if (!str) return '';
   return str
@@ -136,7 +158,7 @@ function escapeHTML(str) {
 // 2. CLOUD SYNC (diff-aware)
 // ==========================================
 async function loadCloudData() {
-  if (isSaving || noteEditing) return;   // ← CHANGED: also skip while typing
+  if (isSaving || noteEditing) return;
 
   try {
     const response = await fetch('/api/prayer', { cache: 'no-store' });
@@ -149,7 +171,7 @@ async function loadCloudData() {
     // Guard again after async gap
     if (isSaving || noteEditing) return;
 
-    // ← CHANGED: skip re-render if nothing changed
+    // Skip re-render if nothing changed
     const hash = JSON.stringify(freshData);
     if (hash === lastDataHash) return;
     lastDataHash = hash;
@@ -167,7 +189,7 @@ setInterval(loadCloudData, POLL_INTERVAL_MS);
 // ==========================================
 // 3. SOUND & VISUAL FX (single AudioContext)
 // ==========================================
-let _audioCtx = null;                        // ← NEW: reuse one context
+let _audioCtx = null;
 async function playGentleChime() {
   try {
     const AudioCtx = window.AudioContext || window.webkitAudioContext;
@@ -192,7 +214,7 @@ async function playGentleChime() {
   }
 }
 
-let _incenseActive = false;                  // ← NEW: prevent overlapping canvases
+let _incenseActive = false;
 function triggerGoldenIncense() {
   if (_incenseActive) return;
   _incenseActive = true;
@@ -258,7 +280,7 @@ function loginUser() {
   const user = userSelect.value;
   const pass = passInput.value;
 
-  if (!user) { toast('Please select a pilgrim.'); return; }   // ← CHANGED
+  if (!user) { toast('Please select a pilgrim.'); return; }
   if (PASSWORDS[user] === pass) {
     loggedInUser = user;
     localStorage.setItem('orthodox_journey_user', user);
@@ -266,7 +288,7 @@ function loginUser() {
     updateAuthUI();
     renderDashboard();
   } else {
-    toast('Incorrect password for ' + user);                  // ← CHANGED
+    toast('Incorrect password for ' + user);
   }
 }
 
@@ -322,8 +344,15 @@ function changeDate(deltaDays) {
   renderMatrix();
 }
 
+// ← CHANGED: clamp incoming dates into the 40-day window
 function onDatePicked(val) {
   if (!val) return;
+  if (!DATE_KEYS.includes(val)) {
+    toast('Please pick a date within the 40-day journey.');
+    val = val < DATE_KEYS[0] ? DATE_KEYS[0]
+        : val > DATE_KEYS[DATE_KEYS.length - 1] ? DATE_KEYS[DATE_KEYS.length - 1]
+        : val;
+  }
   selectedDateStr = val;
   const picker = document.getElementById('journeyDatePicker');
   if (picker) picker.value = selectedDateStr;
@@ -334,7 +363,7 @@ function onDatePicked(val) {
 
 function updateDateLabel() {
   const cur = parseLocalDate(selectedDateStr);
-  const diffDays = DATE_KEYS.indexOf(selectedDateStr);       // ← CHANGED: O(1)
+  const diffDays = DATE_KEYS.indexOf(selectedDateStr);
   const dayNum = diffDays + 1;
   const dateFormatted = cur.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
   const labelElement = document.getElementById('dateDisplayLabel');
@@ -352,9 +381,9 @@ function updateDailyWisdom(dayIndex) {
 // ==========================================
 // 6. SAVE PRAYER PROGRESS & NOTES (non-blocking)
 // ==========================================
-function togglePrayer(user, prayerType) {                    // ← no longer async
+function togglePrayer(user, prayerType) {
   if (loggedInUser !== user) {
-    toast(`Please log in as ${user} to update prayer records.`);   // ← CHANGED
+    toast(`Please log in as ${user} to update prayer records.`);
     return;
   }
 
@@ -379,7 +408,7 @@ function togglePrayer(user, prayerType) {                    // ← no longer as
   }
 
   // ---- 4. Fire-and-forget network ----
-  isSaving = true;                                            // ← only locks poll
+  isSaving = true;
   fetch('/api/prayer', {
     method: 'POST',
     cache: 'no-store',
@@ -391,12 +420,10 @@ function togglePrayer(user, prayerType) {                    // ← no longer as
   })
     .then(res => {
       if (!res.ok) throw new Error('HTTP ' + res.status);
-      // ← REMOVED: don't overwrite cloudData with server snapshot;
-      //           the server now holds the truth we already have locally.
     })
     .catch(err => {
       console.error('Save failed:', err);
-      userData[prayerType] = prevStatus;                      // revert
+      userData[prayerType] = prevStatus;
       renderDashboard();
       renderMatrix();
       toast('Save failed — reverted');
@@ -406,7 +433,7 @@ function togglePrayer(user, prayerType) {                    // ← no longer as
     });
 }
 
-function saveNote(user, noteText) {                           // ← no longer async
+function saveNote(user, noteText) {
   if (loggedInUser !== user) return;
 
   if (!cloudData[selectedDateStr]) cloudData[selectedDateStr] = {};
@@ -433,7 +460,7 @@ function saveNote(user, noteText) {                           // ← no longer a
 // ==========================================
 function get40DayCompletionCount(user) {
   let count = 0;
-  for (let i = 0; i < DATE_KEYS.length; i++) {                // ← CHANGED
+  for (let i = 0; i < DATE_KEYS.length; i++) {
     const k = DATE_KEYS[i];
     const rec = cloudData[k] && cloudData[k][user];
     if (rec && rec.jesus && rec.theotokos) count++;
@@ -511,7 +538,7 @@ function renderDashboard() {
     container.appendChild(card);
   });
 
-  // ← NEW: delegated listeners, attached once per render, no inline JS
+  // Delegated listeners, attached once per render, no inline JS
   container.querySelectorAll('button[data-action="toggle"]').forEach(btn => {
     btn.addEventListener('click', () => {
       const card = btn.closest('.user-card');
@@ -559,7 +586,6 @@ function renderMatrix() {
   rows.push('</tbody>');
   table.innerHTML = rows.join('');
 
-  // ← NEW: delegated row click (attached once per render, single listener)
   table.onclick = (e) => {
     const tr = e.target.closest('tr[data-date]');
     if (tr) onDatePicked(tr.dataset.date);
@@ -567,13 +593,57 @@ function renderMatrix() {
 }
 
 // ==========================================
-// 10. BOOTSTRAP
+// 10. MIDNIGHT AUTO-ADVANCE                 // ← NEW
+// ==========================================
+let _midnightTimer = null;
+
+function scheduleMidnightRefresh() {
+  clearTimeout(_midnightTimer);
+  const now = new Date();
+  const nextMidnight = new Date(now);
+  nextMidnight.setHours(24, 0, 0, 0);
+  const ms = nextMidnight - now + 1000;      // +1s buffer
+
+  _midnightTimer = setTimeout(() => {
+    // Only auto-jump if the user was already on "today" —
+    // don't yank them off a day they deliberately browsed to.
+    if (selectedDateStr === todayStr()) {
+      selectedDateStr = defaultSelectedDate();
+      const picker = document.getElementById('journeyDatePicker');
+      if (picker) picker.value = selectedDateStr;
+      updateDateLabel();
+      renderDashboard();
+      renderMatrix();
+    }
+    scheduleMidnightRefresh();               // re-arm for the next midnight
+  }, ms);
+}
+
+// ==========================================
+// 11. BOOTSTRAP                             // ← CHANGED
 // ==========================================
 document.addEventListener('DOMContentLoaded', () => {
+  selectedDateStr = defaultSelectedDate();   // re-derive "today" on every load
   loadCloudData();
   updateAuthUI();
   updateDateLabel();
 
   const picker = document.getElementById('journeyDatePicker');
-  if (picker) picker.value = selectedDateStr;
+  if (picker) {
+    picker.value = selectedDateStr;
+    picker.min = DATE_KEYS[0];
+    picker.max = DATE_KEYS[DATE_KEYS.length - 1];
+  }
+
+  scheduleMidnightRefresh();                 // auto-advance at midnight
+
+  // "Today" button handler
+  document.getElementById('goTodayBtn')?.addEventListener('click', () => {
+    selectedDateStr = defaultSelectedDate();
+    const p = document.getElementById('journeyDatePicker');
+    if (p) p.value = selectedDateStr;
+    updateDateLabel();
+    renderDashboard();
+    renderMatrix();
+  });
 });
