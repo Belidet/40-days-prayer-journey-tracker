@@ -61,9 +61,9 @@ let loggedInUser = localStorage.getItem('orthodox_journey_user') || null;
 let cloudData = {};
 
 // Polling guards
-let isSaving = false;
-let noteEditing = false;
-let lastDataHash = '';
+let isSaving = false;       // blocks the poll while a save is in flight
+let noteEditing = false;    // blocks the poll while user is typing in a note
+let lastDataHash = '';      // used to skip re-render if the poll returns identical data
 
 // ==========================================
 // 1b. NON-BLOCKING TOAST (replaces alert)
@@ -120,24 +120,27 @@ const DATE_KEYS = (() => {
   return out;
 })();
 
-// Live "today" helpers
+// ← NEW: live "today" helpers
 function todayStr() {
   return formatDateStr(new Date());
 }
 
+// 0 = Day 1, 39 = Day 40, negative = before journey, ≥40 = after journey
 function currentJourneyDayIndex() {
   const start = parseLocalDate(START_DATE_STR);
   const today = parseLocalDate(todayStr());
   return Math.round((today - start) / (1000 * 60 * 60 * 24));
 }
 
+// What date should the app open on? Today, clamped into the 40-day window.
 function defaultSelectedDate() {
   const idx = currentJourneyDayIndex();
-  if (idx < 0) return DATE_KEYS[0];
-  if (idx >= TOTAL_DAYS) return DATE_KEYS[DATE_KEYS.length - 1];
-  return todayStr();
+  if (idx < 0) return DATE_KEYS[0];                                // before journey
+  if (idx >= TOTAL_DAYS) return DATE_KEYS[DATE_KEYS.length - 1];   // after journey
+  return todayStr();                                               // today
 }
 
+// ← CHANGED: initialize selection to "today" instead of Day 1
 let selectedDateStr = defaultSelectedDate();
 
 function escapeHTML(str) {
@@ -165,8 +168,10 @@ async function loadCloudData() {
     }
     const freshData = await response.json();
 
+    // Guard again after async gap
     if (isSaving || noteEditing) return;
 
+    // Skip re-render if nothing changed
     const hash = JSON.stringify(freshData);
     if (hash === lastDataHash) return;
     lastDataHash = hash;
@@ -339,6 +344,7 @@ function changeDate(deltaDays) {
   renderMatrix();
 }
 
+// ← CHANGED: clamp incoming dates into the 40-day window
 function onDatePicked(val) {
   if (!val) return;
   if (!DATE_KEYS.includes(val)) {
@@ -381,6 +387,7 @@ function togglePrayer(user, prayerType) {
     return;
   }
 
+  // ---- 1. Optimistic local update (synchronous) ----
   if (!cloudData[selectedDateStr]) cloudData[selectedDateStr] = {};
   if (!cloudData[selectedDateStr][user]) {
     cloudData[selectedDateStr][user] = { jesus: false, theotokos: false, note: '' };
@@ -390,14 +397,17 @@ function togglePrayer(user, prayerType) {
   const newStatus = !prevStatus;
   userData[prayerType] = newStatus;
 
+  // ---- 2. Instant UI ----
   renderDashboard();
   renderMatrix();
 
+  // ---- 3. FX ----
   if (newStatus) {
     playGentleChime();
     if (userData.jesus && userData.theotokos) triggerGoldenIncense();
   }
 
+  // ---- 4. Fire-and-forget network ----
   isSaving = true;
   fetch('/api/prayer', {
     method: 'POST',
@@ -528,6 +538,7 @@ function renderDashboard() {
     container.appendChild(card);
   });
 
+  // Delegated listeners, attached once per render, no inline JS
   container.querySelectorAll('button[data-action="toggle"]').forEach(btn => {
     btn.addEventListener('click', () => {
       const card = btn.closest('.user-card');
@@ -582,7 +593,7 @@ function renderMatrix() {
 }
 
 // ==========================================
-// 10. MIDNIGHT AUTO-ADVANCE
+// 10. MIDNIGHT AUTO-ADVANCE                 // ← NEW
 // ==========================================
 let _midnightTimer = null;
 
@@ -591,9 +602,11 @@ function scheduleMidnightRefresh() {
   const now = new Date();
   const nextMidnight = new Date(now);
   nextMidnight.setHours(24, 0, 0, 0);
-  const ms = nextMidnight - now + 1000;
+  const ms = nextMidnight - now + 1000;      // +1s buffer
 
   _midnightTimer = setTimeout(() => {
+    // Only auto-jump if the user was already on "today" —
+    // don't yank them off a day they deliberately browsed to.
     if (selectedDateStr === todayStr()) {
       selectedDateStr = defaultSelectedDate();
       const picker = document.getElementById('journeyDatePicker');
@@ -602,205 +615,35 @@ function scheduleMidnightRefresh() {
       renderDashboard();
       renderMatrix();
     }
-    scheduleMidnightRefresh();
+    scheduleMidnightRefresh();               // re-arm for the next midnight
   }, ms);
 }
 
 // ==========================================
-// 11. PRAYER ROPE COUNTER (ephemeral — no storage)  // ← NEW SECTION
+// 11. BOOTSTRAP                             // ← CHANGED
 // ==========================================
-let ropeState = {
-  total: 50,
-  count: 0,
-  completed: false,      // true during the celebration window
-  resetTimer: null       // auto-reset handle
-};
+document.addEventListener('DOMContentLoaded', () => {
+  selectedDateStr = defaultSelectedDate();   // re-derive "today" on every load
+  loadCloudData();
+  updateAuthUI();
+  updateDateLabel();
 
-function renderRopeBeads() {
-  const svg = document.getElementById('ropeRing');
-  if (!svg) return;
-
-  const total = ropeState.total;
-  const count = ropeState.count;
-
-  const cx = 150, cy = 150, r = 118;
-  const beadRadius = total <= 50 ? 6 : total <= 100 ? 4.5 : 3.5;
-
-  svg.innerHTML = '';
-
-  // Guide circle (dashed, subtle)
-  const guide = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-  guide.setAttribute('cx', cx);
-  guide.setAttribute('cy', cy);
-  guide.setAttribute('r', r);
-  guide.setAttribute('fill', 'none');
-  guide.setAttribute('stroke', '#3d2a1a');
-  guide.setAttribute('stroke-width', '2');
-  guide.setAttribute('stroke-dasharray', '2 6');
-  svg.appendChild(guide);
-
-  // Beads
-  for (let i = 0; i < total; i++) {
-    const angle = (-Math.PI / 2) + (i / total) * Math.PI * 2;
-    const x = cx + r * Math.cos(angle);
-    const y = cy + r * Math.sin(angle);
-
-    const bead = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-    bead.setAttribute('cx', x);
-    bead.setAttribute('cy', y);
-    bead.setAttribute('r', beadRadius);
-    bead.setAttribute('class', 'rope-bead' + (i < count ? ' filled' : ''));
-    bead.setAttribute('fill', i < count ? '#ffd700' : '#2a1b10');
-    bead.setAttribute('stroke', i < count ? '#fff4b0' : '#4a3220');
-    bead.setAttribute('stroke-width', '1');
-    bead.dataset.index = i;
-
-    bead.addEventListener('click', () => {
-      if (ropeState.completed) return;
-      ropeState.count = i + 1;
-      renderRope();
-      pulseCount();
-      playRopeTick();
-      if (ropeState.count === ropeState.total) completeRope();
-    });
-
-    svg.appendChild(bead);
+  const picker = document.getElementById('journeyDatePicker');
+  if (picker) {
+    picker.value = selectedDateStr;
+    picker.min = DATE_KEYS[0];
+    picker.max = DATE_KEYS[DATE_KEYS.length - 1];
   }
 
-  // Central decorative cross (very subtle)
-  const crossGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-  crossGroup.setAttribute('opacity', '0.15');
-  crossGroup.setAttribute('pointer-events', 'none');
-  crossGroup.innerHTML = `
-    <line x1="${cx}" y1="${cy - 20}" x2="${cx}" y2="${cy + 20}" stroke="#ffd700" stroke-width="2"/>
-    <line x1="${cx - 12}" y1="${cy - 6}" x2="${cx + 12}" y2="${cy - 6}" stroke="#ffd700" stroke-width="2"/>
-  `;
-  svg.appendChild(crossGroup);
-}
+  scheduleMidnightRefresh();                 // auto-advance at midnight
 
-function renderRope() {
-  renderRopeBeads();
-  const countEl = document.getElementById('ropeCount');
-  const totalEl = document.getElementById('ropeTotal');
-  if (countEl) {
-    countEl.textContent = ropeState.count;
-    countEl.classList.toggle('complete', ropeState.completed);
-  }
-  if (totalEl) totalEl.textContent = `/ ${ropeState.total}`;
-}
-
-function pulseCount() {
-  const countEl = document.getElementById('ropeCount');
-  if (!countEl) return;
-  countEl.classList.remove('pulse');
-  void countEl.offsetWidth;    // force reflow so the animation restarts
-  countEl.classList.add('pulse');
-  setTimeout(() => countEl.classList.remove('pulse'), 200);
-}
-
-function tapRope() {
-  if (ropeState.completed) return;
-  if (ropeState.count >= ropeState.total) return;
-
-  ropeState.count += 1;
-  renderRope();
-  pulseCount();
-  playRopeTick();
-
-  if (ropeState.count === ropeState.total) completeRope();
-}
-
-function completeRope() {
-  ropeState.completed = true;
-  renderRope();
-
-  // Celebratory feedback
-  playGentleChime();
-  triggerGoldenIncense();
-  toast(`Rope complete — ${ropeState.total} prayers offered 🙏`, 3200);
-
-  // Auto-reset after the celebration finishes
-  clearTimeout(ropeState.resetTimer);
-  ropeState.resetTimer = setTimeout(() => {
-    resetRope(true);   // silent reset — no toast
-  }, 2600);
-}
-
-// Silent by default; pass `true` for the auto-reset path
-function resetRope(silent = false) {
-  clearTimeout(ropeState.resetTimer);
-  ropeState.count = 0;
-  ropeState.completed = false;
-  renderRope();
-  if (!silent) toast('Rope reset');
-}
-
-function playRopeTick() {
-  try {
-    const AudioCtx = window.AudioContext || window.webkitAudioContext;
-    if (!AudioCtx) return;
-    if (!_audioCtx) _audioCtx = new AudioCtx();
-    if (_audioCtx.state === 'suspended') _audioCtx.resume();
-
-    const ctx = _audioCtx;
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(880, ctx.currentTime);
-    gain.gain.setValueAtTime(0.08, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.12);
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.start();
-    osc.stop(ctx.currentTime + 0.12);
-  } catch (e) { /* ignore */ }
-}
-
-function applyRopeSize() {
-  const select = document.getElementById('ropeSizeSelect');
-  const custom = document.getElementById('ropeSizeCustom');
-  if (!select) return;
-
-  let newTotal;
-  if (select.value === 'custom') {
-    newTotal = parseInt(custom.value, 10);
-    if (!newTotal || newTotal < 1 || newTotal > 500) {
-      toast('Please enter a bead count between 1 and 500.');
-      return;
-    }
-  } else {
-    newTotal = parseInt(select.value, 10);
-  }
-
-  if (newTotal === ropeState.total) return;
-
-  if (ropeState.count > 0) {
-    const ok = confirm(`Change rope size to ${newTotal}? Your current progress will be cleared.`);
-    if (!ok) return;
-  }
-
-  ropeState.total = newTotal;
-  ropeState.count = 0;
-  ropeState.completed = false;
-  clearTimeout(ropeState.resetTimer);
-  renderRope();
-}
-
-function initPrayerRope() {
-  // No load — always start fresh
-  const select = document.getElementById('ropeSizeSelect');
-  const custom = document.getElementById('ropeSizeCustom');
-  if (select) {
-    const preset = ['33', '50', '100', '150'];
-    if (preset.includes(String(ropeState.total))) {
-      select.value = String(ropeState.total);
-    } else {
-      select.value = 'custom';
-      if (custom) {
-        custom.style.display = 'inline-block';
-        custom.value = ropeState.total;
-      }
-    }
-  }
-
-  // Wire controls (only
+  // "Today" button handler
+  document.getElementById('goTodayBtn')?.addEventListener('click', () => {
+    selectedDateStr = defaultSelectedDate();
+    const p = document.getElementById('journeyDatePicker');
+    if (p) p.value = selectedDateStr;
+    updateDateLabel();
+    renderDashboard();
+    renderMatrix();
+  });
+});
