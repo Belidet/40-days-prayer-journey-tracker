@@ -166,7 +166,7 @@ input:focus, select:focus, textarea:focus {
 .password-wrapper input[type="password"],
 .password-wrapper input[type="text"] {
   width: 100%;
-  padding-right: 42px !important; /* Reserves space so text never overlaps eye icon */
+  padding-right: 42px !important;
   box-sizing: border-box;
 }
 
@@ -190,7 +190,7 @@ button.pass-toggle-btn {
   font-size: 1rem;
   color: var(--gold-primary);
   cursor: pointer;
-  z-index: 10 !important; /* Constrains toggle click exclusively to icon */
+  z-index: 10 !important;
   pointer-events: auto !important;
   -webkit-tap-highlight-color: transparent;
 }
@@ -418,7 +418,7 @@ button.sub-btn:hover {
 }
 
 /* ==========================================
-   Today Button — visual distinction from Prev/Next   ← NEW
+   Today Button — visual distinction from Prev/Next
    ========================================== */
 .date-nav #goTodayBtn {
   background: linear-gradient(180deg, #d4af37, #b8860b);
@@ -438,6 +438,174 @@ button.sub-btn:hover {
 .date-nav #goTodayBtn:active {
   transform: translateY(0);
   box-shadow: 0 0 8px rgba(255, 215, 0, 0.45);
+}
+
+/* ==========================================
+   PRAYER ROPE COUNTER                    ← NEW
+   ========================================== */
+.prayer-rope-section {
+  background: var(--card-bg);
+  padding: 20px 24px 24px;
+  border-radius: 4px;
+  margin-bottom: 25px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.rope-header {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 18px;
+  border-bottom: 1px solid rgba(212, 175, 55, 0.2);
+  padding-bottom: 10px;
+}
+
+.rope-header h3 {
+  color: var(--gold-primary);
+  font-size: 1.2rem;
+  margin: 0;
+}
+
+.rope-subtitle {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  font-weight: normal;
+  font-style: italic;
+}
+
+.rope-size-picker {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 0.9rem;
+  color: var(--text-muted);
+}
+
+/* Rope ring container */
+.rope-body {
+  position: relative;
+  width: 320px;
+  height: 320px;
+  max-width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 16px;
+}
+
+#ropeRing {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Beads */
+.rope-bead {
+  transition: fill 0.25s ease, r 0.25s ease, filter 0.25s ease;
+  cursor: pointer;
+}
+
+.rope-bead.filled {
+  filter: drop-shadow(0 0 4px var(--gold-bright));
+}
+
+/* Center counter overlay */
+.rope-center {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+  pointer-events: none;
+  user-select: none;
+}
+
+.rope-count {
+  font-family: 'Cinzel', serif;
+  font-size: 3.4rem;
+  font-weight: 700;
+  color: var(--gold-bright);
+  line-height: 1;
+  text-shadow: 0 0 18px rgba(255, 215, 0, 0.45);
+  transition: transform 0.15s ease;
+}
+
+.rope-count.pulse {
+  transform: scale(1.15);
+}
+
+.rope-total {
+  font-family: 'Cinzel', serif;
+  font-size: 1rem;
+  color: var(--gold-primary);
+  margin-top: 2px;
+}
+
+.rope-label {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  margin-top: 4px;
+}
+
+/* Rope controls */
+.rope-controls {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.rope-tap-btn {
+  padding: 12px 28px;
+  font-size: 1rem;
+  letter-spacing: 1px;
+  background: linear-gradient(180deg, var(--crimson), #5c0016);
+  border: 2px solid var(--gold-primary);
+  box-shadow: 0 0 14px rgba(212, 175, 55, 0.25);
+}
+
+.rope-tap-btn:hover {
+  background: linear-gradient(180deg, var(--crimson-hover), var(--crimson));
+  box-shadow: 0 0 22px rgba(255, 215, 0, 0.5);
+}
+
+.rope-tap-btn:active {
+  transform: translateY(1px) scale(0.98);
+}
+
+/* Hint text under the rope */
+.rope-hint {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  font-style: italic;
+  text-align: center;
+  max-width: 400px;
+  line-height: 1.5;
+}
+
+/* Completion flourish */
+.rope-count.complete {
+  color: var(--gold-bright);
+  animation: ropeComplete 0.9s ease-out;
+}
+
+@keyframes ropeComplete {
+  0%   { transform: scale(1);   text-shadow: 0 0 18px rgba(255, 215, 0, 0.45); }
+  40%  { transform: scale(1.4); text-shadow: 0 0 40px rgba(255, 215, 0, 0.95); }
+  100% { transform: scale(1);   text-shadow: 0 0 18px rgba(255, 215, 0, 0.45); }
 }
 
 /* Dashboard Grid */
@@ -663,6 +831,16 @@ button.sub-btn:hover {
   h1 {
     font-size: 1.75rem;
   }
+
+  /* Prayer rope tweaks for tablets and small phones  ← NEW */
+  .rope-body {
+    width: 280px;
+    height: 280px;
+  }
+
+  .rope-count {
+    font-size: 3rem;
+  }
 }
 
 @media (max-width: 480px) {
@@ -684,9 +862,7 @@ button.sub-btn:hover {
     width: 100%;
   }
 
-  /* ==========================================
-     Stack the Today button on its own row     ← NEW
-     ========================================== */
+  /* Stack the Today button on its own row */
   .date-nav {
     flex-wrap: wrap;
     gap: 8px;
@@ -695,5 +871,47 @@ button.sub-btn:hover {
   .date-nav #goTodayBtn {
     flex-basis: 100%;
     margin-top: 4px;
+  }
+
+  /* Prayer rope tweaks for small phones  ← NEW */
+  .prayer-rope-section {
+    padding: 16px 14px 20px;
+  }
+
+  .rope-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .rope-size-picker {
+    width: 100%;
+  }
+
+  .rope-body {
+    width: 240px;
+    height: 240px;
+  }
+
+  .rope-count {
+    font-size: 2.6rem;
+  }
+
+  .rope-total {
+    font-size: 0.9rem;
+  }
+
+  .rope-controls {
+    width: 100%;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .rope-tap-btn,
+  .rope-controls .sub-btn {
+    width: 100%;
+  }
+
+  .rope-hint {
+    font-size: 0.8rem;
   }
 }
