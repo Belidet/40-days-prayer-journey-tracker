@@ -417,6 +417,29 @@ button.sub-btn:hover {
   align-items: center;
 }
 
+/* ==========================================
+   Today Button — visual distinction from Prev/Next   ← NEW
+   ========================================== */
+.date-nav #goTodayBtn {
+  background: linear-gradient(180deg, #d4af37, #b8860b);
+  color: #121212;
+  border-color: var(--gold-bright);
+  font-weight: 700;
+  text-shadow: none;
+  box-shadow: 0 0 10px rgba(212, 175, 55, 0.35);
+}
+
+.date-nav #goTodayBtn:hover {
+  background: linear-gradient(180deg, #ffd700, #d4af37);
+  color: #121212;
+  box-shadow: 0 0 16px rgba(255, 215, 0, 0.55);
+}
+
+.date-nav #goTodayBtn:active {
+  transform: translateY(0);
+  box-shadow: 0 0 8px rgba(255, 215, 0, 0.45);
+}
+
 /* Dashboard Grid */
 .dashboard {
   display: grid;
@@ -659,5 +682,18 @@ button.sub-btn:hover {
 
   .password-wrapper input {
     width: 100%;
+  }
+
+  /* ==========================================
+     Stack the Today button on its own row     ← NEW
+     ========================================== */
+  .date-nav {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .date-nav #goTodayBtn {
+    flex-basis: 100%;
+    margin-top: 4px;
   }
 }
