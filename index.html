@@ -16,7 +16,7 @@
   <!-- Favicon & Stylesheet -->
   <link rel="icon" type="image/png" href="icon-192.png">
   <link rel="apple-touch-icon" href="icon-192.png">
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style.css?v=2"> <!-- ← CHANGED: cache-bust for the new CSS -->
 
   <!-- Font preconnections for optimal performance -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -144,7 +144,47 @@
         <button type="button" onclick="changeDate(-1)" aria-label="Previous Day">&#9664; Prev Day</button>
         <input type="date" id="journeyDatePicker" min="2026-09-11" max="2026-10-20" value="2026-09-11" onchange="onDatePicked(this.value)" aria-label="Select Date">
         <button type="button" onclick="changeDate(1)" aria-label="Next Day">Next Day &#9654;</button>
-        <button type="button" id="goTodayBtn" aria-label="Jump to Today">Today</button> <!-- ← NEW: one-tap return to today's reading -->
+        <button type="button" id="goTodayBtn" aria-label="Jump to Today">Today</button>
+      </div>
+    </section>
+
+    <!-- PRAYER ROPE COUNTER --> <!-- ← NEW SECTION -->
+    <section class="prayer-rope-section gold-border-frame" aria-label="Digital Prayer Rope">
+      <div class="rope-header">
+        <h3>Prayer Rope <span class="rope-subtitle">— Digital Chotki</span></h3>
+        <div class="rope-size-picker">
+          <label for="ropeSizeSelect">Beads:</label>
+          <select id="ropeSizeSelect" aria-label="Number of beads">
+            <option value="33">33</option>
+            <option value="50" selected>50</option>
+            <option value="100">100</option>
+            <option value="150">150</option>
+            <option value="custom">Custom…</option>
+          </select>
+          <input type="number" id="ropeSizeCustom" min="1" max="500" placeholder="e.g. 40"
+                 style="display:none; width: 80px;" aria-label="Custom bead count">
+          <button type="button" id="ropeApplySizeBtn" class="sub-btn">Apply</button>
+        </div>
+      </div>
+
+      <div class="rope-body">
+        <svg id="ropeRing" viewBox="0 0 300 300" role="img" aria-label="Prayer rope ring">
+          <!-- Beads injected by script.js -->
+        </svg>
+        <div class="rope-center">
+          <div class="rope-count" id="ropeCount">0</div>
+          <div class="rope-total" id="ropeTotal">/ 50</div>
+          <div class="rope-label">prayers</div>
+        </div>
+      </div>
+
+      <div class="rope-controls">
+        <button type="button" id="ropeTapBtn" class="rope-tap-btn">Tap to Pray</button>
+        <button type="button" id="ropeResetBtn" class="sub-btn">Reset</button>
+      </div>
+
+      <div class="rope-hint" id="ropeHint">
+        Lord Jesus Christ, Son of God, have mercy on me, a sinner.
       </div>
     </section>
 
@@ -165,6 +205,6 @@
 
   </div>
 
-  <script src="script.js?v=2"></script> <!-- ← CHANGED: cache-bust so browsers fetch the new JS -->
+  <script src="script.js?v=3"></script> <!-- ← CHANGED: bumped to v=3 (script also needs the rope code) -->
 </body>
 </html>
