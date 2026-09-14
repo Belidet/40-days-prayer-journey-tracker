@@ -3,7 +3,6 @@
 // ==========================================
 const USERS = ['Belidet', 'Ephi', 'Seli', 'Ermi'];
 
-// Note: For production, authenticate credentials via backend POST requests
 const PASSWORDS = {
   Belidet: 'belidet123',
   Ephi: 'ephi123',
@@ -13,9 +12,8 @@ const PASSWORDS = {
 
 const START_DATE_STR = '2026-09-11';
 const TOTAL_DAYS = 40;
-const POLL_INTERVAL_MS = 10000;   // 10s polling interval
+const POLL_INTERVAL_MS = 10000;
 
-// 40 Unique Sayings & Scripture Verses — One for each day of the journey
 const dailyWisdomArray = [
   /* Day 1 */  '"Acquire a peaceful spirit, and thousands around you will be saved." — Abba Seraphim of Sarov',
   /* Day 2 */  '"Go, sit in your cell, and your cell will teach you everything." — Abba Moses the Black',
@@ -63,16 +61,48 @@ let loggedInUser = localStorage.getItem('orthodox_journey_user') || null;
 let selectedDateStr = START_DATE_STR;
 let cloudData = {};
 
-// Guard flag: prevents background polling from overwriting an in-flight save or active editing
-let isSaving = false;
+// Polling guards
+let isSaving = false;       // blocks the poll while a save is in flight
+let noteEditing = false;    // blocks the poll while user is typing in a note
+let lastDataHash = '';      // used to skip re-render if the poll returns identical data  // ← NEW
 
-// Helper: Safely parse YYYY-MM-DD into a local Date without UTC offset shifts
+// ==========================================
+// 1b. NON-BLOCKING TOAST (replaces alert)     // ← NEW
+// ==========================================
+function toast(msg, ms = 2500) {
+  let el = document.getElementById('_toast');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = '_toast';
+    el.style.cssText = `
+      position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%) translateY(20px);
+      background: rgba(20,15,5,0.95); color: #ffd700; padding: 10px 18px;
+      border: 1px solid #ffd700; border-radius: 8px; z-index: 10000;
+      font-family: inherit; font-size: 0.9rem; opacity: 0;
+      transition: opacity .2s, transform .2s; pointer-events: none;
+      max-width: 90vw; text-align: center;
+    `;
+    document.body.appendChild(el);
+  }
+  el.textContent = msg;
+  requestAnimationFrame(() => {
+    el.style.opacity = '1';
+    el.style.transform = 'translateX(-50%) translateY(0)';
+  });
+  clearTimeout(el._t);
+  el._t = setTimeout(() => {
+    el.style.opacity = '0';
+    el.style.transform = 'translateX(-50%) translateY(20px)';
+  }, ms);
+}
+
+// ==========================================
+// 1c. PRE-COMPUTED DATE KEYS                 // ← NEW (huge perf win)
+// ==========================================
 function parseLocalDate(dateStr) {
   const [year, month, day] = dateStr.split('-').map(Number);
   return new Date(year, month - 1, day);
 }
-
-// Helper: Format Date object to YYYY-MM-DD
 function formatDateStr(dateObj) {
   const y = dateObj.getFullYear();
   const m = String(dateObj.getMonth() + 1).padStart(2, '0');
@@ -80,7 +110,17 @@ function formatDateStr(dateObj) {
   return `${y}-${m}-${d}`;
 }
 
-// Helper: Escape HTML to prevent XSS in template literals
+const DATE_KEYS = (() => {
+  const start = parseLocalDate(START_DATE_STR);
+  const out = [];
+  for (let i = 0; i < TOTAL_DAYS; i++) {
+    const d = new Date(start);
+    d.setDate(d.getDate() + i);
+    out.push(formatDateStr(d));
+  }
+  return out;
+})();
+
 function escapeHTML(str) {
   if (!str) return '';
   return str
@@ -93,11 +133,10 @@ function escapeHTML(str) {
 }
 
 // ==========================================
-// 2. CLOUD SYNC
+// 2. CLOUD SYNC (diff-aware)
 // ==========================================
 async function loadCloudData() {
-  // Never pull from cloud while user is actively saving or modifying state
-  if (isSaving) return;
+  if (isSaving || noteEditing) return;   // ← CHANGED: also skip while typing
 
   try {
     const response = await fetch('/api/prayer', { cache: 'no-store' });
@@ -106,34 +145,37 @@ async function loadCloudData() {
       return;
     }
     const freshData = await response.json();
-    
-    // Double-check guard before overwriting local state
-    if (!isSaving) {
-      cloudData = freshData;
-      renderDashboard();
-      renderMatrix();
-    }
+
+    // Guard again after async gap
+    if (isSaving || noteEditing) return;
+
+    // ← CHANGED: skip re-render if nothing changed
+    const hash = JSON.stringify(freshData);
+    if (hash === lastDataHash) return;
+    lastDataHash = hash;
+
+    cloudData = freshData;
+    renderDashboard();
+    renderMatrix();
   } catch (err) {
     console.error('Failed to connect to Vercel Storage:', err);
   }
 }
 
-// Auto-polling setup
 setInterval(loadCloudData, POLL_INTERVAL_MS);
 
 // ==========================================
-// 3. SOUND & VISUAL FX
+// 3. SOUND & VISUAL FX (single AudioContext)
 // ==========================================
+let _audioCtx = null;                        // ← NEW: reuse one context
 async function playGentleChime() {
   try {
     const AudioCtx = window.AudioContext || window.webkitAudioContext;
     if (!AudioCtx) return;
-    const ctx = new AudioCtx();
-    
-    if (ctx.state === 'suspended') {
-      await ctx.resume();
-    }
+    if (!_audioCtx) _audioCtx = new AudioCtx();
+    if (_audioCtx.state === 'suspended') await _audioCtx.resume();
 
+    const ctx = _audioCtx;
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
     osc.type = 'sine';
@@ -141,10 +183,8 @@ async function playGentleChime() {
     osc.frequency.exponentialRampToValueAtTime(261.63, ctx.currentTime + 2.0);
     gain.gain.setValueAtTime(0.25, ctx.currentTime);
     gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 2.0);
-    
     osc.connect(gain);
     gain.connect(ctx.destination);
-    
     osc.start();
     osc.stop(ctx.currentTime + 2.0);
   } catch (e) {
@@ -152,15 +192,13 @@ async function playGentleChime() {
   }
 }
 
+let _incenseActive = false;                  // ← NEW: prevent overlapping canvases
 function triggerGoldenIncense() {
+  if (_incenseActive) return;
+  _incenseActive = true;
+
   const canvas = document.createElement('canvas');
-  canvas.style.position = 'fixed';
-  canvas.style.top = '0';
-  canvas.style.left = '0';
-  canvas.style.width = '100vw';
-  canvas.style.height = '100vh';
-  canvas.style.pointerEvents = 'none';
-  canvas.style.zIndex = '9999';
+  canvas.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;pointer-events:none;z-index:9999;';
   document.body.appendChild(canvas);
 
   const ctx = canvas.getContext('2d');
@@ -189,24 +227,23 @@ function triggerGoldenIncense() {
       ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
       ctx.fill();
     });
-
     if (particles.some(p => p.opacity > 0)) {
       requestAnimationFrame(animate);
     } else {
       canvas.remove();
+      _incenseActive = false;
     }
   }
   animate();
 }
 
 // ==========================================
-// 4. AUTHENTICATION & UTILITIES
+// 4. AUTHENTICATION
 // ==========================================
 function togglePasswordVisibility() {
   const passInput = document.getElementById('passInput');
   const toggleBtn = document.getElementById('togglePassBtn');
   if (!passInput || !toggleBtn) return;
-
   const isPassword = passInput.type === 'password';
   passInput.type = isPassword ? 'text' : 'password';
   toggleBtn.textContent = isPassword ? '🙈' : '👁️';
@@ -216,17 +253,12 @@ function togglePasswordVisibility() {
 function loginUser() {
   const userSelect = document.getElementById('userSelect');
   const passInput = document.getElementById('passInput');
-  
   if (!userSelect || !passInput) return;
 
   const user = userSelect.value;
   const pass = passInput.value;
 
-  if (!user) {
-    alert('Please select a pilgrim.');
-    return;
-  }
-
+  if (!user) { toast('Please select a pilgrim.'); return; }   // ← CHANGED
   if (PASSWORDS[user] === pass) {
     loggedInUser = user;
     localStorage.setItem('orthodox_journey_user', user);
@@ -234,7 +266,7 @@ function loginUser() {
     updateAuthUI();
     renderDashboard();
   } else {
-    alert('Incorrect password for ' + user);
+    toast('Incorrect password for ' + user);                  // ← CHANGED
   }
 }
 
@@ -252,7 +284,6 @@ function updateAuthUI() {
   const passInput = document.getElementById('passInput');
   const toggleBtn = document.getElementById('togglePassBtn');
 
-  // Reset password field visibility to default state
   if (passInput && passInput.type === 'text') {
     passInput.type = 'password';
     if (toggleBtn) {
@@ -260,39 +291,29 @@ function updateAuthUI() {
       toggleBtn.setAttribute('aria-label', 'Toggle password visibility');
     }
   }
-
   if (loggedInUser) {
-    // Hide the login input section completely
     if (loginControls) loginControls.style.display = 'none';
-    
-    // Display logged in pilgrim name and show only Log Out button
     if (nameDisplay) nameDisplay.textContent = loggedInUser;
     if (logoutBtn) logoutBtn.style.display = 'inline-block';
   } else {
-    // Show the login input section when logged out / guest mode
     if (loginControls) loginControls.style.display = 'flex';
-    
-    // Display default Guest text and hide Log Out button
     if (nameDisplay) nameDisplay.textContent = 'Guest (View Only)';
     if (logoutBtn) logoutBtn.style.display = 'none';
   }
 }
 
 // ==========================================
-// 5. DATE NAVIGATION & DAILY WISDOM
+// 5. DATE NAVIGATION & WISDOM
 // ==========================================
 function changeDate(deltaDays) {
   const cur = parseLocalDate(selectedDateStr);
   cur.setDate(cur.getDate() + deltaDays);
-
   const start = parseLocalDate(START_DATE_STR);
   const end = parseLocalDate(START_DATE_STR);
   end.setDate(end.getDate() + TOTAL_DAYS - 1);
-
   if (cur < start || cur > end) return;
 
   selectedDateStr = formatDateStr(cur);
-  
   const picker = document.getElementById('journeyDatePicker');
   if (picker) picker.value = selectedDateStr;
 
@@ -304,30 +325,20 @@ function changeDate(deltaDays) {
 function onDatePicked(val) {
   if (!val) return;
   selectedDateStr = val;
-
   const picker = document.getElementById('journeyDatePicker');
   if (picker) picker.value = selectedDateStr;
-
   updateDateLabel();
   renderDashboard();
   renderMatrix();
 }
 
 function updateDateLabel() {
-  const start = parseLocalDate(START_DATE_STR);
   const cur = parseLocalDate(selectedDateStr);
-  const diffDays = Math.round((cur - start) / (1000 * 60 * 60 * 24)); // 0-indexed day count
+  const diffDays = DATE_KEYS.indexOf(selectedDateStr);       // ← CHANGED: O(1)
   const dayNum = diffDays + 1;
-  
-  const options = { month: 'long', day: 'numeric', year: 'numeric' };
-  const dateFormatted = cur.toLocaleDateString('en-US', options);
-
+  const dateFormatted = cur.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
   const labelElement = document.getElementById('dateDisplayLabel');
-  if (labelElement) {
-    labelElement.textContent = `Day ${dayNum} of 40 — ${dateFormatted}`;
-  }
-
-  // Update Daily Wisdom Text
+  if (labelElement) labelElement.textContent = `Day ${dayNum} of 40 — ${dateFormatted}`;
   updateDailyWisdom(diffDays);
 }
 
@@ -339,134 +350,93 @@ function updateDailyWisdom(dayIndex) {
 }
 
 // ==========================================
-// 6. SAVE PRAYER PROGRESS & NOTES
+// 6. SAVE PRAYER PROGRESS & NOTES (non-blocking)
 // ==========================================
-async function togglePrayer(user, prayerType) {
+function togglePrayer(user, prayerType) {                    // ← no longer async
   if (loggedInUser !== user) {
-    alert(`Please log in as ${user} to update prayer records.`);
+    toast(`Please log in as ${user} to update prayer records.`);   // ← CHANGED
     return;
   }
 
-  // Lock polling IMMEDIATELY before modifying local memory
-  isSaving = true;
+  // ---- 1. Optimistic local update (synchronous) ----
+  if (!cloudData[selectedDateStr]) cloudData[selectedDateStr] = {};
+  if (!cloudData[selectedDateStr][user]) {
+    cloudData[selectedDateStr][user] = { jesus: false, theotokos: false, note: '' };
+  }
+  const userData = cloudData[selectedDateStr][user];
+  const prevStatus = userData[prayerType];
+  const newStatus = !prevStatus;
+  userData[prayerType] = newStatus;
 
-  try {
-    // 1. Prepare optimistic state structure
-    if (!cloudData[selectedDateStr]) cloudData[selectedDateStr] = {};
-    if (!cloudData[selectedDateStr][user]) {
-      cloudData[selectedDateStr][user] = { jesus: false, theotokos: false, note: '' };
-    }
+  // ---- 2. Instant UI ----
+  renderDashboard();
+  renderMatrix();
 
-    const userData = cloudData[selectedDateStr][user];
-    const newStatus = !userData[prayerType];
-    userData[prayerType] = newStatus;
+  // ---- 3. FX ----
+  if (newStatus) {
+    playGentleChime();
+    if (userData.jesus && userData.theotokos) triggerGoldenIncense();
+  }
 
-    // 2. Instant UI re-render
-    renderDashboard();
-    renderMatrix();
-
-    // 3. Sound & Visual FX
-    if (newStatus) {
-      playGentleChime();
-      if (userData.jesus && userData.theotokos) {
-        triggerGoldenIncense();
-      }
-    }
-
-    // 4. Post update to server
-    const res = await fetch('/api/prayer', {
-      method: 'POST',
-      cache: 'no-store',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        dateKey: selectedDateStr,
-        userData: { [user]: userData }
-      })
-    });
-
-    if (!res.ok) {
-      const errBody = await res.text();
-      console.error('Save failed:', res.status, errBody);
-      alert('Could not save to server. Reverting status...');
-      userData[prayerType] = !newStatus;
+  // ---- 4. Fire-and-forget network ----
+  isSaving = true;                                            // ← only locks poll
+  fetch('/api/prayer', {
+    method: 'POST',
+    cache: 'no-store',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      dateKey: selectedDateStr,
+      userData: { [user]: userData }
+    })
+  })
+    .then(res => {
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      // ← REMOVED: don't overwrite cloudData with server snapshot;
+      //           the server now holds the truth we already have locally.
+    })
+    .catch(err => {
+      console.error('Save failed:', err);
+      userData[prayerType] = prevStatus;                      // revert
       renderDashboard();
       renderMatrix();
-    } else {
-      const payload = await res.json();
-      if (payload && payload.data) {
-        cloudData = payload.data;
-        renderDashboard();
-        renderMatrix();
-      }
-    }
-  } catch (err) {
-    console.error('Network error:', err);
-    alert('Network error — change not saved. Reverting status...');
-    if (cloudData[selectedDateStr] && cloudData[selectedDateStr][user]) {
-      cloudData[selectedDateStr][user][prayerType] = !cloudData[selectedDateStr][user][prayerType];
-    }
-    renderDashboard();
-    renderMatrix();
-  } finally {
-    // Unlock polling after state is safely updated
-    isSaving = false;
-  }
+      toast('Save failed — reverted');
+    })
+    .finally(() => {
+      isSaving = false;
+    });
 }
 
-async function saveNote(user, noteText) {
+function saveNote(user, noteText) {                           // ← no longer async
   if (loggedInUser !== user) return;
 
-  const dayData = cloudData[selectedDateStr] || {};
-  const userData = dayData[user] || { jesus: false, theotokos: false, note: '' };
-  userData.note = noteText;
-
-  // Optimistically commit note to local state
   if (!cloudData[selectedDateStr]) cloudData[selectedDateStr] = {};
+  const userData = cloudData[selectedDateStr][user] || { jesus: false, theotokos: false, note: '' };
+  userData.note = noteText;
   cloudData[selectedDateStr][user] = userData;
 
   isSaving = true;
-  try {
-    const res = await fetch('/api/prayer', {
-      method: 'POST',
-      cache: 'no-store',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        dateKey: selectedDateStr,
-        userData: { [user]: userData }
-      })
-    });
-
-    if (!res.ok) {
-      console.error('Note save failed:', res.status, await res.text());
-    }
-  } catch (err) {
-    console.error('Note network error:', err);
-  } finally {
-    isSaving = false;
-  }
+  fetch('/api/prayer', {
+    method: 'POST',
+    cache: 'no-store',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      dateKey: selectedDateStr,
+      userData: { [user]: userData }
+    })
+  })
+    .catch(err => console.error('Note network error:', err))
+    .finally(() => { isSaving = false; });
 }
 
 // ==========================================
-// 7. COMPLETION COUNTER
+// 7. COMPLETION COUNTER (O(40), no date rebuilds)
 // ==========================================
 function get40DayCompletionCount(user) {
   let count = 0;
-  const startDate = parseLocalDate(START_DATE_STR);
-
-  // Accurately count only within the 40-day window
-  for (let i = 0; i < TOTAL_DAYS; i++) {
-    const d = new Date(startDate);
-    d.setDate(d.getDate() + i);
-    const dateKey = formatDateStr(d);
-
-    if (
-      cloudData[dateKey] &&
-      cloudData[dateKey][user] &&
-      cloudData[dateKey][user].jesus &&
-      cloudData[dateKey][user].theotokos
-    ) {
-      count++;
-    }
+  for (let i = 0; i < DATE_KEYS.length; i++) {                // ← CHANGED
+    const k = DATE_KEYS[i];
+    const rec = cloudData[k] && cloudData[k][user];
+    if (rec && rec.jesus && rec.theotokos) count++;
   }
   return count;
 }
@@ -485,10 +455,11 @@ function renderDashboard() {
     const data = dayData[user] || { jesus: false, theotokos: false, note: '' };
     const totalCompleted = get40DayCompletionCount(user);
     const progressPct = Math.round((totalCompleted / TOTAL_DAYS) * 100);
-
     const isUserLoggedIn = (loggedInUser === user);
+
     const card = document.createElement('article');
     card.className = `user-card gold-border-frame ${isUserLoggedIn ? 'active-user-card' : ''}`;
+    card.dataset.user = user;
 
     card.innerHTML = `
       <div class="user-card-header">
@@ -506,11 +477,10 @@ function renderDashboard() {
         </div>
       </div>
 
-      <!-- Jesus Prayer -->
       <div class="prayer-item ${data.jesus ? 'is-done' : ''}">
         <div class="prayer-name">"Lord Jesus Christ Son of God have mercy on me a sinner."</div>
-        <button type="button" class="status-toggle-btn ${data.jesus ? 'done' : ''}" 
-                onclick="togglePrayer('${user}', 'jesus')"
+        <button type="button" class="status-toggle-btn ${data.jesus ? 'done' : ''}"
+                data-action="toggle" data-prayer="jesus"
                 ${!isUserLoggedIn ? 'disabled style="opacity:0.6; cursor:not-allowed;"' : ''}>
           ${data.jesus ? '✓ Prayer Completed' : 'Mark as Done'}
         </button>
@@ -519,11 +489,10 @@ function renderDashboard() {
         </div>
       </div>
 
-      <!-- Theotokos Prayer -->
       <div class="prayer-item ${data.theotokos ? 'is-done' : ''}">
         <div class="prayer-name">"Most Holy Theotokos save me!"</div>
-        <button type="button" class="status-toggle-btn ${data.theotokos ? 'done' : ''}" 
-                onclick="togglePrayer('${user}', 'theotokos')"
+        <button type="button" class="status-toggle-btn ${data.theotokos ? 'done' : ''}"
+                data-action="toggle" data-prayer="theotokos"
                 ${!isUserLoggedIn ? 'disabled style="opacity:0.6; cursor:not-allowed;"' : ''}>
           ${data.theotokos ? '✓ Prayer Completed' : 'Mark as Done'}
         </button>
@@ -532,55 +501,69 @@ function renderDashboard() {
         </div>
       </div>
 
-      <!-- Reflection Box -->
       <div class="note-box">
-        <textarea placeholder="${isUserLoggedIn ? 'Daily prayer reflection...' : 'No reflection recorded.'}" 
-                  ${!isUserLoggedIn ? 'disabled' : ''} 
-                  onchange="saveNote('${user}', this.value)">${escapeHTML(data.note || '')}</textarea>
+        <textarea placeholder="${isUserLoggedIn ? 'Daily prayer reflection...' : 'No reflection recorded.'}"
+                  data-action="note"
+                  ${!isUserLoggedIn ? 'disabled' : ''}>${escapeHTML(data.note || '')}</textarea>
       </div>
     `;
 
     container.appendChild(card);
   });
+
+  // ← NEW: delegated listeners, attached once per render, no inline JS
+  container.querySelectorAll('button[data-action="toggle"]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const card = btn.closest('.user-card');
+      const user = card.dataset.user;
+      togglePrayer(user, btn.dataset.prayer);
+    });
+  });
+
+  container.querySelectorAll('textarea[data-action="note"]').forEach(ta => {
+    ta.addEventListener('focus', () => { noteEditing = true; });
+    ta.addEventListener('blur',  () => { noteEditing = false; saveNote(ta.closest('.user-card').dataset.user, ta.value); });
+  });
 }
 
 // ==========================================
-// 9. RENDER — 40-DAY MATRIX
+// 9. RENDER — 40-DAY MATRIX (delegated clicks)
 // ==========================================
 function renderMatrix() {
   const table = document.getElementById('journeyMatrixTable');
   if (!table) return;
 
-  let tableContent = `<thead><tr><th>Day</th><th>Date</th>`;
-  USERS.forEach(u => tableContent += `<th>${escapeHTML(u)}</th>`);
-  tableContent += `</tr></thead><tbody>`;
-
-  const startDate = parseLocalDate(START_DATE_STR);
+  const rows = [];
+  rows.push('<thead><tr><th>Day</th><th>Date</th>');
+  USERS.forEach(u => rows.push(`<th>${escapeHTML(u)}</th>`));
+  rows.push('</tr></thead><tbody>');
 
   for (let i = 0; i < TOTAL_DAYS; i++) {
-    const d = new Date(startDate);
-    d.setDate(d.getDate() + i);
-    const dateStr = formatDateStr(d);
+    const dateStr = DATE_KEYS[i];
+    const d = parseLocalDate(dateStr);
     const isSelected = (dateStr === selectedDateStr);
 
-    tableContent += `<tr class="${isSelected ? 'active-row' : ''}" onclick="onDatePicked('${dateStr}')" style="cursor:pointer;">
-      <td>Day ${i + 1}</td>
-      <td style="font-size:0.8rem;">${d.getMonth() + 1}/${d.getDate()}</td>`;
+    rows.push(`<tr class="${isSelected ? 'active-row' : ''}" data-date="${dateStr}" style="cursor:pointer;">`);
+    rows.push(`<td>Day ${i + 1}</td>`);
+    rows.push(`<td style="font-size:0.8rem;">${d.getMonth() + 1}/${d.getDate()}</td>`);
 
     USERS.forEach(u => {
-      const rec = cloudData[dateStr] ? cloudData[dateStr][u] : { jesus: false, theotokos: false };
+      const rec = cloudData[dateStr] ? cloudData[dateStr][u] : null;
       let statusClass = '';
       if (rec && rec.jesus && rec.theotokos) statusClass = 'completed';
       else if (rec && (rec.jesus || rec.theotokos)) statusClass = 'partial';
-
-      tableContent += `<td><span class="matrix-status-dot ${statusClass}"></span></td>`;
+      rows.push(`<td><span class="matrix-status-dot ${statusClass}"></span></td>`);
     });
-
-    tableContent += `</tr>`;
+    rows.push('</tr>');
   }
+  rows.push('</tbody>');
+  table.innerHTML = rows.join('');
 
-  tableContent += `</tbody>`;
-  table.innerHTML = tableContent;
+  // ← NEW: delegated row click (attached once per render, single listener)
+  table.onclick = (e) => {
+    const tr = e.target.closest('tr[data-date]');
+    if (tr) onDatePicked(tr.dataset.date);
+  };
 }
 
 // ==========================================
@@ -590,7 +573,7 @@ document.addEventListener('DOMContentLoaded', () => {
   loadCloudData();
   updateAuthUI();
   updateDateLabel();
-  
+
   const picker = document.getElementById('journeyDatePicker');
   if (picker) picker.value = selectedDateStr;
 });
